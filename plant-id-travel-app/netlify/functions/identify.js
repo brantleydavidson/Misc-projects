@@ -1,7 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 const SYSTEM_PROMPT = `You are a plant identification expert. Analyze the provided plant photo and return a JSON object identifying the plant.
 
 Return ONLY valid JSON matching this exact schema:
@@ -50,6 +48,12 @@ export async function handler(event) {
   }
 
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      return { statusCode: 500, headers: corsHeaders(), body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }) }
+    }
+    const anthropic = new Anthropic({ apiKey })
+
     const { image, mimeType } = JSON.parse(event.body)
 
     if (!image) {

@@ -1,7 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 const SYSTEM_PROMPT = `You are a plant recommendation expert. Given a user's climate profile and space type, recommend 6-8 plants that will thrive in their conditions.
 
 Return ONLY valid JSON — an array of plant objects matching this schema:
@@ -44,6 +42,12 @@ export async function handler(event) {
   }
 
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      return { statusCode: 500, headers: corsHeaders(), body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }) }
+    }
+    const anthropic = new Anthropic({ apiKey })
+
     const { homeClimate, spaceType } = JSON.parse(event.body)
 
     if (!homeClimate) {
