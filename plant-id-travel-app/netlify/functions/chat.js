@@ -59,7 +59,7 @@ export async function handler(event) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
-      return { statusCode: 500, headers: corsHeaders(), body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured', envKeys: Object.keys(process.env).filter(k => k.includes('ANTHROP') || k.includes('API')) }) }
+      return { statusCode: 500, headers: corsHeaders(), body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }) }
     }
 
     const anthropic = new Anthropic({ apiKey })
