@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { MapPin, Home, Trees, Flower2, Building2 } from 'lucide-react'
 import { useApp } from '../lib/store'
 import { getClimateProfile, getAvailableCities } from '../lib/climate'
+import { updateProfile } from '../lib/db'
 
 const spaceOptions = [
   { value: 'yard', icon: Trees, label: 'Big Yard', desc: 'Room for trees & beds' },
@@ -39,6 +40,16 @@ export default function HomeSetup() {
       payload: { location: { label: climate.label, value: location }, climate },
     })
     dispatch({ type: 'SET_SPACE_TYPE', payload: spaceType })
+
+    // Persist to Supabase
+    if (state.profileId) {
+      updateProfile(state.profileId, {
+        home_city: climate.label,
+        home_zip: customInput.trim() || null,
+        space_type: spaceType,
+      })
+    }
+
     navigate('/discover')
   }
 

@@ -2,8 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Camera, Send, Leaf, ImagePlus, Loader2, MapPin } from 'lucide-react'
 import { useApp } from '../lib/store'
-import { getPlantById, identifyPlant, getAllPlants } from '../lib/plants'
-import { generateChatResponse } from '../lib/chat'
+import { getPlantById, getAllPlants } from '../lib/plants'
+import { assessGrowability } from '../lib/climate'
+import { identifyPlantAI, chatWithAI, resizeImage } from '../lib/api'
+import { saveChatMessage, saveIdentification } from '../lib/db'
 
 export default function TravelChat() {
   const location = useLocation()
@@ -12,7 +14,6 @@ export default function TravelChat() {
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [currentPlant, setCurrentPlant] = useState(null)
-  const [idResult, setIdResult] = useState(null)
   const [showPlantPicker, setShowPlantPicker] = useState(false)
   const scrollRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -25,6 +26,11 @@ export default function TravelChat() {
         setCurrentPlant(plant)
         addBotMessage(`I see you're looking at **${plant.commonName}** (*${plant.scientificName}*). ${plant.description}\n\nWhat would you like to know? I can tell you:\n- Can you grow it at home?\n- Care tips\n- Alternatives\n- When to plant it`)
       }
+    } else if (location.state?.plant) {
+      // Support passing full plant object (from AI identification)
+      const plant = location.state.plant
+      setCurrentPlant(plant)
+      addBotMessage(`I see you're looking at **${plant.commonName}** (*${plant.scientificName}*). ${plant.description}\n\nWhat would you like to know?`)
     } else {
       addBotMessage("Welcome to Travel Mode! Snap a photo of a plant you've spotted, or select one from the catalog to start chatting.")
     }
@@ -48,25 +54,58 @@ export default function TravelChat() {
     setIsTyping(true)
 
     try {
-      const result = await identifyPlant(file)
-      setIdResult(result)
-      setCurrentPlant(result.topMatch)
-      const conf = Math.round(result.topMatch.confidence * 100)
-      let msg = `I'm ${conf}% confident this is **${result.topMatch.commonName}** (*${result.topMatch.scientificName}*).\n\n${result.topMatch.description}`
+      // Resize and convert to base64
+      const { base64, mimeType } = await resizeImage(file)
 
-      if (result.alternatives.length > 0) {
-        msg += `\n\n**Other possibilities:**\n`
-        for (const alt of result.alternatives) {
-          msg += `- ${alt.commonName} (${Math.round(alt.confidence * 100)}%)\n`
+      // Call AI identification
+      const result = await identifyPlantAI(base64, mimeType, state.homeClimate)
+      const plant = result.topMatch
+      setCurrentPlant(plant)
+
+      // Run local climate assessment if we have home climate
+      let assessmentMsg = ''
+      if (state.homeClimate) {
+        const assessment = assessGrowability(plant, state.homeClimate)
+        assessmentMsg = `\n\n**Quick assessment for ${state.homeClimate.label}:** ${assessment.ratingLabel} (${assessment.scorePct}% match)`
+
+        // Save identification to Supabase
+        if (state.profileId) {
+          saveIdentification(state.profileId, {
+            plantName: plant.commonName,
+            scientificName: plant.scientificName,
+            confidence: plant.confidence,
+            assessment,
+          })
         }
       }
 
-      msg += `\n\nAsk me anything about this plant — like "Can I grow this at home?""`
+      const conf = Math.round((plant.confidence || 0.9) * 100)
+      let msg = `I'm ${conf}% confident this is **${plant.commonName}** (*${plant.scientificName}*).
+
+${plant.description}${assessmentMsg}`
+
+      if (result.alternatives?.length > 0) {
+        msg += `\n\n**Other possibilities:**\n`
+        for (const alt of result.alternatives) {
+          msg += `- ${alt.commonName} (${Math.round((alt.confidence || 0.3) * 100)}%)\n`
+        }
+      }
+
+      msg += `\n\nAsk me anything about this plant — like "Can I grow this at home?"`
       addBotMessage(msg)
+
+      // Save messages to Supabase
+      if (state.profileId) {
+        saveChatMessage(state.profileId, { role: 'user', content: '(photo)', plantContext: plant.commonName })
+        saveChatMessage(state.profileId, { role: 'bot', content: msg, plantContext: plant.commonName })
+      }
     } catch (err) {
+      console.error('Photo identification error:', err)
       addBotMessage("Sorry, I couldn't identify that plant. Try a clearer photo with good lighting, or select from the catalog.")
     }
     setIsTyping(false)
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function handleSelectPlant(plant) {
@@ -85,13 +124,22 @@ export default function TravelChat() {
     setIsTyping(true)
 
     try {
-      const response = await generateChatResponse(text, {
-        plant: currentPlant,
-        homeClimate: state.homeClimate,
-        identificationResult: idResult,
-      })
+      // Build history for context (last 10 messages)
+      const history = messages.slice(-10).map(m => ({
+        role: m.role === 'bot' ? 'bot' : 'user',
+        text: m.text,
+      }))
+
+      const response = await chatWithAI(text, history, currentPlant, state.homeClimate)
       addBotMessage(response)
-    } catch {
+
+      // Save to Supabase
+      if (state.profileId) {
+        saveChatMessage(state.profileId, { role: 'user', content: text, plantContext: currentPlant?.commonName })
+        saveChatMessage(state.profileId, { role: 'bot', content: response, plantContext: currentPlant?.commonName })
+      }
+    } catch (err) {
+      console.error('Chat error:', err)
       addBotMessage("Something went wrong. Try again?")
     }
     setIsTyping(false)

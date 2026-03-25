@@ -1,18 +1,21 @@
 import { useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Leaf, Heart, MapPin, MessageCircle } from 'lucide-react'
 import { useApp } from '../lib/store'
 import { getPlantById } from '../lib/plants'
 import { assessGrowability, getPlacementAdvice } from '../lib/climate'
+import { addToWishlist } from '../lib/db'
 import CompatBadge from '../components/CompatBadge'
 import FactorList from '../components/FactorList'
 
 export default function PlantDetail() {
   const { plantId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { state, dispatch } = useApp()
 
-  const plant = getPlantById(plantId)
+  // Support both hardcoded plants (by ID) and AI-identified plants (via router state)
+  const plant = getPlantById(plantId) || location.state?.plant
   const assessment = useMemo(
     () => plant && state.homeClimate ? assessGrowability(plant, state.homeClimate) : null,
     [plant, state.homeClimate]
@@ -22,7 +25,7 @@ export default function PlantDetail() {
     [assessment, plant]
   )
 
-  const isSaved = state.discoveries.some(d => d.plantId === plantId)
+  const isSaved = state.discoveries.some(d => d.commonName === plant?.commonName)
 
   if (!plant) {
     return (
@@ -35,21 +38,35 @@ export default function PlantDetail() {
 
   function handleSave() {
     if (isSaved) {
-      dispatch({ type: 'REMOVE_DISCOVERY', payload: plantId })
+      const discovery = state.discoveries.find(d => d.commonName === plant.commonName)
+      dispatch({ type: 'REMOVE_DISCOVERY', payload: discovery?.id })
     } else {
-      dispatch({
-        type: 'ADD_DISCOVERY',
-        payload: {
-          id: plantId,
-          plantId: plant.id,
+      const discovery = {
+        id: plant.id || plant.commonName.toLowerCase().replace(/\s+/g, '-'),
+        plantId: plant.id,
+        commonName: plant.commonName,
+        scientificName: plant.scientificName,
+        description: plant.description,
+        rating: assessment?.rating || 'unknown',
+        savedAt: new Date().toISOString(),
+        trip: state.currentTrip?.name || null,
+      }
+      dispatch({ type: 'ADD_DISCOVERY', payload: discovery })
+
+      // Save to Supabase
+      if (state.profileId) {
+        addToWishlist(state.profileId, {
           commonName: plant.commonName,
           scientificName: plant.scientificName,
-          description: plant.description,
           rating: assessment?.rating || 'unknown',
-          savedAt: new Date().toISOString(),
-          trip: state.currentTrip?.name || null,
-        },
-      })
+          assessment,
+        }).then(row => {
+          if (row) {
+            // Store supabaseId for later removal
+            discovery.supabaseId = row.id
+          }
+        })
+      }
     }
   }
 
@@ -64,7 +81,7 @@ export default function PlantDetail() {
           <div>
             <h1 className="text-xl font-bold">{plant.commonName}</h1>
             <p className="text-green-200 text-sm italic">{plant.scientificName}</p>
-            <p className="text-green-300 text-xs mt-1">Family: {plant.family}</p>
+            {plant.family && <p className="text-green-300 text-xs mt-1">Family: {plant.family}</p>}
           </div>
           <div className="w-12 h-12 rounded-xl bg-green-600 flex items-center justify-center">
             <Leaf size={24} />
@@ -133,22 +150,30 @@ export default function PlantDetail() {
           <p className="text-sm text-slate-600 leading-relaxed mb-3">{plant.description}</p>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <span className="text-slate-400">Sun</span>
-              <p className="text-slate-700 font-medium capitalize">{plant.sunNeeds}</p>
-            </div>
-            <div>
-              <span className="text-slate-400">Water</span>
-              <p className="text-slate-700 font-medium capitalize">{plant.waterNeeds}</p>
-            </div>
-            <div>
-              <span className="text-slate-400">Zones</span>
-              <p className="text-slate-700 font-medium">{plant.hardinessRange.join('–')}</p>
-            </div>
-            <div>
-              <span className="text-slate-400">Size</span>
-              <p className="text-slate-700 font-medium capitalize">{plant.size}</p>
-            </div>
+            {plant.sunNeeds && (
+              <div>
+                <span className="text-slate-400">Sun</span>
+                <p className="text-slate-700 font-medium capitalize">{plant.sunNeeds}</p>
+              </div>
+            )}
+            {plant.waterNeeds && (
+              <div>
+                <span className="text-slate-400">Water</span>
+                <p className="text-slate-700 font-medium capitalize">{plant.waterNeeds}</p>
+              </div>
+            )}
+            {plant.hardinessRange && (
+              <div>
+                <span className="text-slate-400">Zones</span>
+                <p className="text-slate-700 font-medium">{plant.hardinessRange.join('–')}</p>
+              </div>
+            )}
+            {plant.size && (
+              <div>
+                <span className="text-slate-400">Size</span>
+                <p className="text-slate-700 font-medium capitalize">{plant.size}</p>
+              </div>
+            )}
           </div>
 
           {plant.careNotes && (
@@ -173,7 +198,7 @@ export default function PlantDetail() {
             {isSaved ? 'Remove from Wishlist' : 'Save to Wishlist'}
           </button>
           <button
-            onClick={() => navigate('/travel', { state: { plantId: plant.id } })}
+            onClick={() => navigate('/travel', { state: { plant, plantId: plant.id } })}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all active:scale-[0.98]"
           >
             <MessageCircle size={16} />

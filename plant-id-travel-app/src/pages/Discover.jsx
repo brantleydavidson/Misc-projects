@@ -1,14 +1,62 @@
-import { useState, useMemo } from 'react'
-import { Search, MapPin } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Search, MapPin, Sparkles, Loader2 } from 'lucide-react'
 import { useApp } from '../lib/store'
 import { getAllPlants, searchPlants } from '../lib/plants'
 import { assessGrowability } from '../lib/climate'
+import { getRecommendations } from '../lib/api'
 import PlantCard from '../components/PlantCard'
+
+const RECS_CACHE_KEY = 'plantscout_recommendations'
 
 export default function Discover() {
   const { state } = useApp()
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState('all') // all | perfect | possible | indoor_only
+  const [filter, setFilter] = useState('all')
+  const [recommendations, setRecommendations] = useState([])
+  const [loadingRecs, setLoadingRecs] = useState(false)
+  const [recsError, setRecsError] = useState(null)
+
+  // Load cached recommendations on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(RECS_CACHE_KEY)
+      if (cached) {
+        const { recs, climateLabel } = JSON.parse(cached)
+        // Only use cache if climate hasn't changed
+        if (climateLabel === state.homeClimate?.label) {
+          setRecommendations(recs)
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [state.homeClimate?.label])
+
+  async function fetchRecommendations() {
+    if (!state.homeClimate) return
+    setLoadingRecs(true)
+    setRecsError(null)
+    try {
+      const recs = await getRecommendations(state.homeClimate, state.spaceType)
+      setRecommendations(recs)
+      // Cache
+      localStorage.setItem(RECS_CACHE_KEY, JSON.stringify({
+        recs,
+        climateLabel: state.homeClimate.label,
+      }))
+    } catch (err) {
+      console.error('Recommendations error:', err)
+      setRecsError('Could not load AI recommendations. The catalog below still works!')
+    }
+    setLoadingRecs(false)
+  }
+
+  const recsWithAssessments = useMemo(() => {
+    return recommendations.map(plant => ({
+      plant,
+      assessment: state.homeClimate ? assessGrowability(plant, state.homeClimate) : null,
+    }))
+  }, [recommendations, state.homeClimate])
 
   const plantsWithAssessments = useMemo(() => {
     const plants = query ? searchPlants(query) : getAllPlants()
@@ -18,18 +66,22 @@ export default function Discover() {
     }))
   }, [query, state.homeClimate])
 
+  const allItems = useMemo(() => {
+    return [...recsWithAssessments, ...plantsWithAssessments]
+  }, [recsWithAssessments, plantsWithAssessments])
+
   const filtered = useMemo(() => {
-    if (filter === 'all') return plantsWithAssessments
-    return plantsWithAssessments.filter(({ assessment }) => assessment?.rating === filter)
-  }, [plantsWithAssessments, filter])
+    if (filter === 'all') return allItems
+    return allItems.filter(({ assessment }) => assessment?.rating === filter)
+  }, [allItems, filter])
 
   const counts = useMemo(() => {
-    const c = { all: plantsWithAssessments.length, perfect: 0, possible: 0, indoor_only: 0 }
-    for (const { assessment } of plantsWithAssessments) {
+    const c = { all: allItems.length, perfect: 0, possible: 0, indoor_only: 0 }
+    for (const { assessment } of allItems) {
       if (assessment?.rating) c[assessment.rating] = (c[assessment.rating] || 0) + 1
     }
     return c
-  }, [plantsWithAssessments])
+  }, [allItems])
 
   return (
     <div className="px-5 py-6">
@@ -45,6 +97,30 @@ export default function Discover() {
           )}
         </div>
       </div>
+
+      {/* AI Recommendations section */}
+      {state.homeClimate && recommendations.length === 0 && !loadingRecs && (
+        <button
+          onClick={fetchRecommendations}
+          className="w-full mb-5 py-3 px-4 rounded-xl bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:from-green-700 hover:to-green-800 active:scale-[0.98] transition-all"
+        >
+          <Sparkles size={16} />
+          Get AI Recommendations for Your Climate
+        </button>
+      )}
+
+      {loadingRecs && (
+        <div className="mb-5 py-6 flex flex-col items-center gap-2 text-slate-500">
+          <Loader2 size={20} className="animate-spin text-green-600" />
+          <p className="text-xs">Finding perfect plants for {state.homeClimate?.label}...</p>
+        </div>
+      )}
+
+      {recsError && (
+        <div className="mb-5 p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <p className="text-xs text-amber-700">{recsError}</p>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-4">
@@ -93,9 +169,26 @@ export default function Discover() {
         </div>
       )}
 
+      {/* AI Recommendations */}
+      {recsWithAssessments.length > 0 && filter === 'all' && !query && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={14} className="text-green-600" />
+            <h2 className="text-sm font-semibold text-slate-800">AI Picks for You</h2>
+          </div>
+          <div className="space-y-3">
+            {recsWithAssessments.map(({ plant, assessment }) => (
+              <PlantCard key={`rec-${plant.id}`} plant={plant} assessment={assessment} isRecommendation />
+            ))}
+          </div>
+          <div className="mt-4 mb-2 border-t border-slate-200" />
+          <h2 className="text-sm font-semibold text-slate-800 mb-3">Plant Catalog</h2>
+        </div>
+      )}
+
       {/* Plant list */}
       <div className="space-y-3">
-        {filtered.map(({ plant, assessment }) => (
+        {(filter === 'all' && !query ? plantsWithAssessments : filtered.filter(item => !recommendations.some(r => r.id === item.plant.id))).map(({ plant, assessment }) => (
           <PlantCard key={plant.id} plant={plant} assessment={assessment} />
         ))}
         {filtered.length === 0 && (

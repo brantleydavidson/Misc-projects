@@ -1,11 +1,20 @@
 import { useNavigate } from 'react-router-dom'
 import { Heart, Trash2, Leaf } from 'lucide-react'
 import { useApp } from '../lib/store'
+import { removeFromWishlist } from '../lib/db'
 import CompatBadge from '../components/CompatBadge'
 
 export default function Wishlist() {
   const { state, dispatch } = useApp()
   const navigate = useNavigate()
+
+  function handleRemove(discovery) {
+    dispatch({ type: 'REMOVE_DISCOVERY', payload: discovery.id })
+    // Also remove from Supabase if it has a supabaseId
+    if (discovery.supabaseId) {
+      removeFromWishlist(discovery.supabaseId)
+    }
+  }
 
   if (state.discoveries.length === 0) {
     return (
@@ -37,14 +46,14 @@ export default function Wishlist() {
           <div key={d.id} className="bg-white rounded-xl border border-slate-200 p-4">
             <div className="flex gap-3">
               <button
-                onClick={() => navigate(`/plant/${d.plantId}`)}
+                onClick={() => d.plantId ? navigate(`/plant/${d.plantId}`) : null}
                 className="w-12 h-12 rounded-lg bg-green-50 flex items-center justify-center shrink-0"
               >
                 <Leaf size={20} className="text-green-600" />
               </button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <button onClick={() => navigate(`/plant/${d.plantId}`)} className="text-left">
+                  <button onClick={() => d.plantId ? navigate(`/plant/${d.plantId}`) : null} className="text-left">
                     <h3 className="font-semibold text-slate-800 text-sm">{d.commonName}</h3>
                     <p className="text-xs text-slate-400 italic">{d.scientificName}</p>
                   </button>
@@ -53,11 +62,11 @@ export default function Wishlist() {
                 <p className="text-xs text-slate-500 mt-1 line-clamp-1">{d.description}</p>
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-slate-300">
-                    {new Date(d.savedAt).toLocaleDateString()}
+                    {d.savedAt ? new Date(d.savedAt).toLocaleDateString() : ''}
                     {d.trip && ` — ${d.trip}`}
                   </span>
                   <button
-                    onClick={() => dispatch({ type: 'REMOVE_DISCOVERY', payload: d.id })}
+                    onClick={() => handleRemove(d)}
                     className="text-slate-300 hover:text-red-500 transition-colors"
                   >
                     <Trash2 size={14} />
