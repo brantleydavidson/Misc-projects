@@ -9,6 +9,7 @@ export interface UserProfile {
   goal_weight_kg?: number;
   goal_description?: string;
   weight_loss_pace?: 'steady' | 'moderate' | 'aggressive';
+  body_fat_pct?: number;           // estimated body fat % (for Katch-McArdle BMR)
   // Section 2 - Lifestyle
   job_type?: string;
   exercise_frequency?: number;

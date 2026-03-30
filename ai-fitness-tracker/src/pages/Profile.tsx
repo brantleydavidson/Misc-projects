@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Dumbbell, Watch, Apple, ChevronRight, RotateCcw, Loader2, Footprints, Flame, Heart, Moon, Zap, Activity, X } from 'lucide-react';
+import { Dumbbell, Watch, Apple, ChevronRight, RotateCcw, Loader2, Footprints, Flame, Heart, Moon, Zap, Activity, X, LogOut } from 'lucide-react';
 import type { UserProfile, GarminData } from '../types';
 import { calculateMacros, calculateWaterTarget, calculateTDEE, calculateBMR, getActivityMultiplier } from '../lib/calculations';
 import { getGarminData, saveGarminData } from '../lib/storage';
+import { useAuth } from '../hooks/useAuth';
 
 interface ProfileProps {
   profile: UserProfile;
@@ -11,6 +12,7 @@ interface ProfileProps {
 }
 
 export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) {
+  const { user, signOut } = useAuth();
   const macros = calculateMacros(profile);
   const tdee = calculateTDEE(profile);
   const bmr = calculateBMR(profile);
@@ -247,6 +249,19 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
           <p className="text-[10px] text-slate-500 text-center">
             This data feeds into your AI coach for personalized advice
           </p>
+        </div>
+      )}
+
+      {/* Account */}
+      {user && (
+        <div className="glass rounded-2xl p-4">
+          <h2 className="text-sm font-semibold text-white mb-2">Account</h2>
+          <p className="text-xs text-slate-400 mb-3">{user.email}</p>
+          <button onClick={signOut}
+            className="flex items-center gap-2 text-xs text-neon-pink hover:text-neon-pink/80 transition"
+          >
+            <LogOut size={14} /> Sign Out
+          </button>
         </div>
       )}
 

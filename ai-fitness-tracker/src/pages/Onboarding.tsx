@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Dumbbell, Send, Zap, ChevronRight } from 'lucide-react';
+import { Dumbbell, Send, Zap, ChevronRight, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { sendOnboarding } from '../lib/api';
 import { calculateMacros, calculateWaterTarget, calculateBMR, calculateTDEE } from '../lib/calculations';
+import { useAuth } from '../hooks/useAuth';
 
 interface OnboardingProps {
   profile: UserProfile;
@@ -10,7 +11,7 @@ interface OnboardingProps {
   onComplete: () => void;
 }
 
-type Phase = 'arrival' | 'conversation' | 'reveal' | 'commit';
+type Phase = 'arrival' | 'conversation' | 'auth' | 'reveal' | 'commit';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -31,6 +32,22 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
   const [showPlan, setShowPlan] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auth state
+  const { user, signUp, signIn, signInWithGoogle } = useAuth();
+  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // Auto-advance from auth phase when user signs in (e.g. Google redirect)
+  useEffect(() => {
+    if (phase === 'auth' && user) {
+      setPhase('reveal');
+    }
+  }, [phase, user]);
 
   // Arrival animation sequence
   useEffect(() => {
@@ -232,10 +249,14 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
 
     // Check if conversation is complete
     if (turn >= TOTAL_TURNS) {
-      // Move to reveal phase
       setLoading(false);
       onUpdate(newCollected);
-      setPhase('reveal');
+      // If already authenticated, skip auth phase
+      if (user) {
+        setPhase('reveal');
+      } else {
+        setPhase('auth');
+      }
       return;
     }
 
@@ -397,6 +418,11 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
           )}
         </div>
 
+        {/* Quick suggestions per turn */}
+        {!loading && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
+          <QuickSuggestions turn={turn} onSelect={handleSend} />
+        )}
+
         {/* Input */}
         <div className="relative z-10 flex-shrink-0 px-4 pb-8 pt-2">
           <div className="flex gap-2 items-end glass rounded-2xl p-2">
@@ -422,6 +448,142 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
     );
   }
 
+  // ─── PHASE: AUTH ────────────────────────────────────────
+  if (phase === 'auth') {
+    async function handleAuth(e: React.FormEvent) {
+      e.preventDefault();
+      setAuthError('');
+      setAuthLoading(true);
+      try {
+        if (authMode === 'signup') {
+          await signUp(authEmail, authPassword);
+        } else {
+          await signIn(authEmail, authPassword);
+        }
+        setPhase('reveal');
+      } catch (err: any) {
+        setAuthError(err?.message || 'Authentication failed');
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    async function handleGoogle() {
+      setAuthError('');
+      try {
+        await signInWithGoogle();
+        // Redirect flow — page will reload with session
+      } catch (err: any) {
+        setAuthError(err?.message || 'Google sign-in failed');
+      }
+    }
+
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden px-6">
+        <div className="absolute inset-0 grid-bg opacity-30" />
+        <div className="absolute inset-0 scanlines" />
+
+        <div className="relative z-10 w-full max-w-sm fade-up">
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
+              <Zap size={24} className="text-white" />
+            </div>
+            <h1 className="font-display text-lg text-neon-teal glow-text uppercase tracking-wider">
+              Save Your Protocol
+            </h1>
+            <p className="font-ui text-xs text-chrome/50 mt-2">
+              Create an account to sync across devices and never lose your data.
+            </p>
+          </div>
+
+          {/* Google OAuth button */}
+          <button
+            onClick={handleGoogle}
+            className="w-full py-3 rounded-xl font-ui text-sm text-chrome bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center justify-center gap-3 mb-4"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-[10px] text-chrome/30 font-ui uppercase">or</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+
+          {/* Email/password form */}
+          <form onSubmit={handleAuth} className="space-y-3">
+            <div className="relative">
+              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-chrome/30" />
+              <input
+                type="email"
+                value={authEmail}
+                onChange={e => setAuthEmail(e.target.value)}
+                placeholder="Email"
+                required
+                className="w-full bg-white/5 rounded-xl pl-10 pr-4 py-3 text-chrome text-sm placeholder-chrome/30 border border-white/10 focus:border-neon-teal/50 focus:outline-none font-ui"
+              />
+            </div>
+            <div className="relative">
+              <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-chrome/30" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={authPassword}
+                onChange={e => setAuthPassword(e.target.value)}
+                placeholder="Password (min 6 characters)"
+                required
+                minLength={6}
+                className="w-full bg-white/5 rounded-xl pl-10 pr-10 py-3 text-chrome text-sm placeholder-chrome/30 border border-white/10 focus:border-neon-teal/50 focus:outline-none font-ui"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-chrome/30 hover:text-chrome/60"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            {authError && (
+              <p className="text-neon-pink text-xs font-ui">{authError}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full py-3 rounded-xl font-ui font-semibold text-sm uppercase tracking-wider
+                bg-gradient-to-r from-neon-teal to-neon-pink text-white
+                disabled:opacity-50 transition btn-neon flex items-center justify-center gap-2"
+            >
+              {authLoading && <Loader2 size={16} className="animate-spin" />}
+              {authMode === 'signup' ? 'Create Account' : 'Sign In'}
+            </button>
+          </form>
+
+          <button
+            onClick={() => setAuthMode(authMode === 'signup' ? 'signin' : 'signup')}
+            className="w-full mt-3 text-center text-xs text-chrome/40 font-ui hover:text-chrome/60 transition"
+          >
+            {authMode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
+
+          {/* Skip option */}
+          <button
+            onClick={() => setPhase('reveal')}
+            className="w-full mt-6 text-center text-[10px] text-chrome/25 font-ui hover:text-chrome/40 transition"
+          >
+            Skip for now — I'll create an account later
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ─── PHASE 2: THE REVEAL ───────────────────────────────
   if (phase === 'reveal') {
     const macros = calculateMacros(collectedData as UserProfile);
@@ -432,9 +594,9 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
     const processingLines = [
       `> Parsing goal: ${collectedData.goal_description || 'optimize performance'}...`,
       `> Cross-referencing: ${collectedData.exercise_frequency || '?'}x/week training + ${collectedData.job_type || 'unknown'} lifestyle...`,
-      `> Calculating BMR via Mifflin-St Jeor...`,
-      `> Mapping activity multiplier → TDEE...`,
-      `> Computing macro split (protein-forward)...`,
+      `> Calculating BMR via ${collectedData.body_fat_pct ? 'Katch-McArdle' : 'Mifflin-St Jeor'}...`,
+      `> Applying conservative activity multiplier → TDEE...`,
+      `> Computing ISSN-backed macro split (protein-forward)...`,
       collectedData.supplements?.length ? `> Factoring supplement stack: ${collectedData.supplements.join(', ')}...` : '> Checking supplement considerations...',
       `> PROTOCOL READY.`,
     ];
@@ -570,6 +732,88 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
           Your protocol adapts in real-time as you train and eat.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ─── QUICK SUGGESTIONS ────────────────────────────────────
+// Shows tappable suggestion chips per conversation turn to reduce typing
+
+const TURN_SUGGESTIONS: Record<number, string[]> = {
+  1: [
+    'Lose fat and get lean',
+    'Build muscle and strength',
+    'Recomp — lose fat, gain muscle',
+    'Get stronger, maintain weight',
+  ],
+  2: [
+    'Male, 30, 183cm, 95kg, goal 85kg',
+    'Male, 35, 178cm, 90kg, goal 82kg',
+    'Female, 28, 165cm, 70kg, goal 62kg',
+    'Male, 40, 175cm, 100kg, goal 88kg',
+  ],
+  3: [
+    'Desk job, lift 4x/week',
+    'Desk job, lift 3x/week + cardio 2x',
+    'On my feet all day, lift 3x/week',
+    'Physical job, train 5x/week',
+  ],
+  4: [
+    '7 hours sleep, moderate stress, 2-3 drinks/week',
+    '8 hours sleep, low stress, no alcohol',
+    '6 hours sleep, high stress, 4-5 drinks/week',
+    '7 hours sleep, moderate stress, no alcohol',
+  ],
+  5: [
+    'Love steak, tacos, stir fry. Hate mushrooms. Quick meals. 7/10 adventurous',
+    'Love chicken, pasta, sushi. Hate seafood. Meal prep. 5/10 adventurous',
+    'Love burgers, BBQ, rice bowls. Hate olives. From scratch. 8/10 adventurous',
+  ],
+  6: [
+    'Chips and trail mix, mostly boredom snacking. Both sweet and savory.',
+    'Protein bars and fruit, genuine hunger. Savory preference.',
+    'Late night snacking — ice cream, habit-driven. Sweet tooth.',
+  ],
+  7: [
+    'Creatine, protein powder, multivitamin, fish oil. No peptides.',
+    'Creatine, pre-workout, magnesium. Taking BPC-157 for a shoulder issue.',
+    'Just protein powder and creatine. Interested in optimizing my stack.',
+    'No supplements currently. Open to recommendations.',
+  ],
+  8: [
+    'Garmin watch. No major injuries. Just want to be consistent.',
+    'Apple Watch. Bad left knee from running. Love deadlifts.',
+    'Garmin. Recovering from lower back strain. Sleep could be better.',
+    'No wearable yet. Generally healthy, no injuries.',
+  ],
+  9: [
+    'Moderate pace — about 1.2 lbs per week',
+    'Steady and sustainable — 1 lb per week',
+    'Aggressive — let\'s go hard, 1.5 lbs per week',
+  ],
+};
+
+function QuickSuggestions({ turn, onSelect }: { turn: number; onSelect: (text: string) => void }) {
+  const suggestions = TURN_SUGGESTIONS[turn];
+  if (!suggestions) return null;
+
+  return (
+    <div className="relative z-10 px-4 pb-2">
+      <div className="flex flex-col gap-1.5">
+        {suggestions.map((s, i) => (
+          <button
+            key={i}
+            onClick={() => onSelect(s)}
+            className="text-left px-3 py-2 rounded-xl text-xs font-ui text-chrome/60
+              bg-white/[0.03] border border-white/[0.06]
+              hover:bg-neon-teal/5 hover:border-neon-teal/20 hover:text-chrome/80
+              transition-all duration-200 active:scale-[0.98]"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      <p className="text-[9px] text-chrome/20 mt-1.5 text-center font-ui">Tap a suggestion or type your own</p>
     </div>
   );
 }
