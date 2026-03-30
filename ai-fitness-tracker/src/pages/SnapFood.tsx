@@ -104,7 +104,7 @@ export function SnapFood() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 pb-24">
+    <div className="min-h-screen bg-deep-navy pb-24">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <button onClick={() => { stopCamera(); navigate('/'); }} className="text-slate-400">
@@ -119,7 +119,7 @@ export function SnapFood() {
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
           <button key={t} onClick={() => setMealType(t)}
             className={`flex-1 py-2 rounded-lg text-xs capitalize transition ${mealType === t
-              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+              ? 'bg-neon-teal/20 text-neon-teal border border-neon-teal/50'
               : 'bg-white/5 text-slate-400 border border-white/10'}`}
           >{t}</button>
         ))}
@@ -138,9 +138,9 @@ export function SnapFood() {
             Take a photo of your food and AI will instantly estimate the macros
           </p>
           <button onClick={startCamera}
-            className="w-full py-16 rounded-2xl border-2 border-dashed border-cyan-500/40 bg-cyan-500/5 flex flex-col items-center gap-3 hover:bg-cyan-500/10 transition"
+            className="w-full py-16 rounded-2xl border-2 border-dashed border-neon-teal/40 bg-neon-teal/5 flex flex-col items-center gap-3 hover:bg-neon-teal/10 transition"
           >
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center pulse-ring">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center pulse-ring">
               <Camera size={28} className="text-white" />
             </div>
             <span className="text-white font-medium">Take Photo</span>
@@ -149,7 +149,7 @@ export function SnapFood() {
           <button onClick={() => fileInputRef.current?.click()}
             className="w-full py-6 rounded-2xl glass flex items-center justify-center gap-3 hover:bg-white/10 transition"
           >
-            <Image size={20} className="text-purple-400" />
+            <Image size={20} className="text-neon-pink" />
             <span className="text-slate-300">Upload from Gallery</span>
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
@@ -182,7 +182,7 @@ export function SnapFood() {
               <RotateCcw size={16} /> Retake
             </button>
             <button onClick={analyzeImage}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-semibold flex items-center justify-center gap-2"
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink text-white font-semibold flex items-center justify-center gap-2"
             >
               <Zap size={16} /> Analyze
             </button>
@@ -193,8 +193,8 @@ export function SnapFood() {
       {/* Analyzing */}
       {mode === 'analyzing' && (
         <div className="px-4 mt-12 text-center space-y-4">
-          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-cyan-400/20 to-purple-500/20 flex items-center justify-center">
-            <Loader2 size={32} className="text-cyan-400 animate-spin" />
+          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-neon-teal/20 to-neon-pink/20 flex items-center justify-center">
+            <Loader2 size={32} className="text-neon-teal animate-spin" />
           </div>
           <p className="text-white font-medium">Analyzing your food...</p>
           <p className="text-slate-400 text-sm">AI is identifying items and estimating macros</p>
@@ -224,9 +224,9 @@ export function SnapFood() {
             {/* Macro summary */}
             <div className="grid grid-cols-4 gap-3 mb-4">
               <MacroCard label="Calories" value={result.calories} unit="kcal" color="text-orange-400" />
-              <MacroCard label="Protein" value={result.protein} unit="g" color="text-cyan-400" />
-              <MacroCard label="Carbs" value={result.carbs} unit="g" color="text-purple-400" />
-              <MacroCard label="Fat" value={result.fat} unit="g" color="text-pink-400" />
+              <MacroCard label="Protein" value={result.protein} unit="g" color="text-neon-teal" />
+              <MacroCard label="Carbs" value={result.carbs} unit="g" color="text-neon-pink" />
+              <MacroCard label="Fat" value={result.fat} unit="g" color="text-neon-pink" />
             </div>
 
             {/* Individual items */}
@@ -254,7 +254,7 @@ export function SnapFood() {
               <RotateCcw size={16} className="inline mr-1" /> Redo
             </button>
             <button onClick={saveResult}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-500 to-cyan-500 text-white font-semibold flex items-center justify-center gap-2"
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold flex items-center justify-center gap-2"
             >
               <Check size={16} /> Log It
             </button>

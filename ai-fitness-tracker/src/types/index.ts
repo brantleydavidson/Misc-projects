@@ -27,6 +27,16 @@ export interface UserProfile {
   snack_reason?: 'hunger' | 'boredom' | 'habit';
   snack_preference?: 'sweet' | 'savory' | 'both';
   late_night_snacking?: boolean;
+  // Section 5 - Supplements & Peptides
+  supplements?: string[];        // creatine, protein powder, multivitamin, etc.
+  peptides?: string[];           // BPC-157, TB-500, GHK-Cu, etc.
+  supplement_notes?: string;     // free text about stack, dosing, goals
+  // Section 6 - Health & Wearable Data
+  has_wearable?: boolean;
+  wearable_type?: string;        // "garmin", "apple_watch", "whoop", etc.
+  health_conditions?: string[];  // anything AI should know about
+  injuries?: string[];           // current or recurring
+  wildcard_notes?: string;       // anything else the user wants AI to know
   // Calculated
   bmr?: number;
   tdee?: number;

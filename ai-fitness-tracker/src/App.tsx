@@ -52,7 +52,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="h-full flex flex-col bg-slate-950">
+      <div className="h-full flex flex-col bg-deep-navy">
         <main className="flex-1 overflow-y-auto no-scrollbar">
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />

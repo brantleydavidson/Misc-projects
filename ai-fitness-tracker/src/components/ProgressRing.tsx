@@ -12,7 +12,7 @@ interface ProgressRingProps {
 
 export function ProgressRing({
   value, max, size = 120, strokeWidth = 8,
-  color = '#22d3ee', bgColor = 'rgba(255,255,255,0.1)',
+  color = '#00E5CC', bgColor = 'rgba(255,255,255,0.1)',
   label, unit = '', children
 }: ProgressRingProps) {
   const radius = (size - strokeWidth) / 2;

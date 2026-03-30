@@ -23,10 +23,10 @@ export function BottomNav() {
               <button key={path} onClick={() => navigate(path)}
                 className="relative -mt-6 flex flex-col items-center"
               >
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center shadow-lg shadow-cyan-500/25">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center shadow-lg shadow-neon-teal/25">
                   <Icon size={24} className="text-white" />
                 </div>
-                <span className="text-[10px] mt-0.5 text-cyan-400">{label}</span>
+                <span className="text-[10px] mt-0.5 text-neon-teal">{label}</span>
               </button>
             );
           }
@@ -34,8 +34,8 @@ export function BottomNav() {
             <button key={path} onClick={() => navigate(path)}
               className="flex flex-col items-center py-2 px-3 min-w-[60px]"
             >
-              <Icon size={20} className={active ? 'text-cyan-400' : 'text-slate-500'} />
-              <span className={`text-[10px] mt-0.5 ${active ? 'text-cyan-400' : 'text-slate-500'}`}>{label}</span>
+              <Icon size={20} className={active ? 'text-neon-teal' : 'text-slate-500'} />
+              <span className={`text-[10px] mt-0.5 ${active ? 'text-neon-teal' : 'text-slate-500'}`}>{label}</span>
             </button>
           );
         })}

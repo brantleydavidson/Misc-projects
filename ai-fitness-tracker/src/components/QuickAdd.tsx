@@ -50,21 +50,21 @@ export function QuickAdd({ onAdded }: QuickAddProps) {
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <input value={name} onChange={e => setName(e.target.value)}
-          placeholder="Food name" className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-cyan-400 focus:outline-none" />
+          placeholder="Food name" className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none" />
         <div className="flex gap-2">
           {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
             <button key={t} type="button" onClick={() => setMealType(t)}
-              className={`flex-1 py-1.5 rounded-lg text-xs capitalize ${mealType === t ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-white/5 text-slate-400 border border-white/10'}`}
+              className={`flex-1 py-1.5 rounded-lg text-xs capitalize ${mealType === t ? 'bg-neon-teal/20 text-neon-teal border border-neon-teal/50' : 'bg-white/5 text-slate-400 border border-white/10'}`}
             >{t}</button>
           ))}
         </div>
         <div className="grid grid-cols-4 gap-2">
           <input value={calories} onChange={e => setCalories(e.target.value)} type="number" placeholder="Cal" className="bg-white/5 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-orange-400 focus:outline-none" />
-          <input value={protein} onChange={e => setProtein(e.target.value)} type="number" placeholder="Pro" className="bg-white/5 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-cyan-400 focus:outline-none" />
-          <input value={carbs} onChange={e => setCarbs(e.target.value)} type="number" placeholder="Carb" className="bg-white/5 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-purple-400 focus:outline-none" />
+          <input value={protein} onChange={e => setProtein(e.target.value)} type="number" placeholder="Pro" className="bg-white/5 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none" />
+          <input value={carbs} onChange={e => setCarbs(e.target.value)} type="number" placeholder="Carb" className="bg-white/5 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-pink focus:outline-none" />
           <input value={fat} onChange={e => setFat(e.target.value)} type="number" placeholder="Fat" className="bg-white/5 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-pink-400 focus:outline-none" />
         </div>
-        <button type="submit" className="w-full py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-500 text-white text-sm font-semibold">
+        <button type="submit" className="w-full py-2 rounded-lg bg-gradient-to-r from-neon-teal to-neon-pink text-white text-sm font-semibold">
           Add Entry
         </button>
       </form>

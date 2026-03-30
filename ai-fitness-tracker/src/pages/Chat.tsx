@@ -75,7 +75,7 @@ export function Chat({ profile }: ChatProps) {
       <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
         <div>
           <h1 className="text-lg font-bold text-white flex items-center gap-2">
-            <Sparkles size={18} className="text-purple-400" />
+            <Sparkles size={18} className="text-neon-pink" />
             AI Coach
           </h1>
           <p className="text-xs text-slate-400">Your personal nutritionist</p>
@@ -92,8 +92,8 @@ export function Chat({ profile }: ChatProps) {
         {messages.length === 0 && (
           <div className="mt-8 space-y-4">
             <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gradient-to-br from-purple-500/20 to-cyan-500/20 flex items-center justify-center">
-                <Sparkles size={28} className="text-purple-400" />
+              <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gradient-to-br from-neon-pink/20 to-neon-teal/20 flex items-center justify-center">
+                <Sparkles size={28} className="text-neon-pink" />
               </div>
               <h2 className="text-white font-semibold mb-1">Hey! I'm your AI Coach</h2>
               <p className="text-sm text-slate-400 max-w-xs mx-auto">
@@ -116,7 +116,7 @@ export function Chat({ profile }: ChatProps) {
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
               msg.role === 'user'
-                ? 'bg-gradient-to-r from-cyan-600 to-purple-600 text-white rounded-br-md'
+                ? 'bg-gradient-to-r from-neon-teal to-neon-pink text-white rounded-br-md'
                 : 'glass text-slate-200 rounded-bl-md'
             }`}>
               <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -127,7 +127,7 @@ export function Chat({ profile }: ChatProps) {
         {loading && (
           <div className="flex justify-start">
             <div className="glass rounded-2xl rounded-bl-md px-4 py-3">
-              <Loader2 size={16} className="text-purple-400 animate-spin" />
+              <Loader2 size={16} className="text-neon-pink animate-spin" />
             </div>
           </div>
         )}
@@ -146,7 +146,7 @@ export function Chat({ profile }: ChatProps) {
             className="flex-1 bg-transparent text-white text-sm placeholder-slate-500 resize-none focus:outline-none px-2 py-1.5 max-h-24"
           />
           <button onClick={() => handleSend()} disabled={loading || !input.trim()}
-            className="w-9 h-9 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 flex items-center justify-center disabled:opacity-30 transition flex-shrink-0"
+            className="w-9 h-9 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink flex items-center justify-center disabled:opacity-30 transition flex-shrink-0"
           >
             <Send size={16} className="text-white" />
           </button>

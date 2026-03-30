@@ -67,7 +67,7 @@ export function Dashboard({ profile }: DashboardProps) {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-lg font-bold text-white">{greeting}</h1>
+          <h1 className="text-lg font-bold text-white font-display">{greeting}</h1>
           <p className="text-xs text-slate-400">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
@@ -87,7 +87,7 @@ export function Dashboard({ profile }: DashboardProps) {
             </div>
           )}
           <button onClick={() => navigate('/snap')}
-            className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center shadow-lg"
+            className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center shadow-lg"
           >
             <Camera size={18} className="text-white" />
           </button>
@@ -101,7 +101,7 @@ export function Dashboard({ profile }: DashboardProps) {
         >
           <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
             {currentPeriod === 'morning' ? <Sun size={18} className="text-amber-400" /> :
-             currentPeriod === 'midday' ? <Sunset size={18} className="text-cyan-400" /> :
+             currentPeriod === 'midday' ? <Sunset size={18} className="text-neon-teal" /> :
              <Moon size={18} className="text-indigo-400" />}
           </div>
           <div className="flex-1 text-left">
@@ -123,7 +123,7 @@ export function Dashboard({ profile }: DashboardProps) {
                 done
                   ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                   : p === currentPeriod
-                    ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 animate-pulse'
+                    ? 'bg-neon-teal/10 text-neon-teal border border-neon-teal/30 animate-pulse'
                     : 'glass text-slate-500 border border-white/5'
               }`}
             >
@@ -137,9 +137,9 @@ export function Dashboard({ profile }: DashboardProps) {
       <div className="glass rounded-2xl p-5">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <ProgressRing value={summary.calories} max={targets.calories} size={140} strokeWidth={10} color="#22d3ee">
+            <ProgressRing value={summary.calories} max={targets.calories} size={140} strokeWidth={10} color="#00E5CC">
               <div className="text-center">
-                <div className="text-2xl font-bold text-white">{caloriesLeft}</div>
+                <div className="text-2xl font-bold text-white font-data">{caloriesLeft}</div>
                 <div className="text-[10px] text-slate-400">cal left</div>
               </div>
             </ProgressRing>
@@ -173,9 +173,9 @@ export function Dashboard({ profile }: DashboardProps) {
       <div className="glass rounded-2xl p-4">
         <h2 className="text-sm font-semibold text-white mb-3">Macros</h2>
         <div className="flex gap-4">
-          <MacroBar label="Protein" value={summary.protein} target={targets.protein} color="#22d3ee" />
-          <MacroBar label="Carbs" value={summary.carbs} target={targets.carbs} color="#a855f7" />
-          <MacroBar label="Fat" value={summary.fat} target={targets.fat} color="#f472b6" />
+          <MacroBar label="Protein" value={summary.protein} target={targets.protein} color="#00E5CC" />
+          <MacroBar label="Carbs" value={summary.carbs} target={targets.carbs} color="#FF2D78" />
+          <MacroBar label="Fat" value={summary.fat} target={targets.fat} color="#FF2D78" />
         </div>
       </div>
 
@@ -189,7 +189,7 @@ export function Dashboard({ profile }: DashboardProps) {
           <span className="text-xs text-slate-400">{(water / 1000).toFixed(1)}L / {(targets.water / 1000).toFixed(1)}L</span>
         </div>
         <div className="h-3 bg-white/10 rounded-full overflow-hidden mb-3">
-          <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-400 transition-all duration-500"
+          <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-neon-teal transition-all duration-500"
             style={{ width: `${Math.min((water / targets.water) * 100, 100)}%` }} />
         </div>
         <div className="flex gap-2">
@@ -207,7 +207,7 @@ export function Dashboard({ profile }: DashboardProps) {
       <div className="glass rounded-2xl p-4">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-sm font-semibold text-white">Activity</h2>
-          <button onClick={() => navigate('/checkin')} className="text-[10px] text-cyan-400 flex items-center gap-1">
+          <button onClick={() => navigate('/checkin')} className="text-[10px] text-neon-teal flex items-center gap-1">
             Update <ChevronRight size={12} />
           </button>
         </div>
@@ -232,10 +232,10 @@ export function Dashboard({ profile }: DashboardProps) {
               <StatCard icon={<Battery size={14} />} label="Batt Now" value={`${activity.body_battery_current}`} color="text-yellow-400" />
             )}
             {activity.stress_level != null && (
-              <StatCard icon={<Brain size={14} />} label="Stress" value={`${activity.stress_level}`} color="text-purple-400" />
+              <StatCard icon={<Brain size={14} />} label="Stress" value={`${activity.stress_level}`} color="text-neon-pink" />
             )}
             {activity.hrv_status != null && (
-              <StatCard icon={<Activity size={14} />} label="HRV" value={`${activity.hrv_status}ms`} color="text-cyan-400" />
+              <StatCard icon={<Activity size={14} />} label="HRV" value={`${activity.hrv_status}ms`} color="text-neon-teal" />
             )}
             {activity.active_minutes != null && (
               <StatCard icon={<Zap size={14} />} label="Active" value={`${activity.active_minutes}m`} color="text-yellow-400" />
@@ -256,7 +256,7 @@ export function Dashboard({ profile }: DashboardProps) {
         {(activity.workouts || []).length > 0 && (
           <div className="pt-3 mt-3 border-t border-white/5">
             <div className="flex items-center gap-1.5 mb-2">
-              <Dumbbell size={12} className="text-purple-400" />
+              <Dumbbell size={12} className="text-neon-pink" />
               <span className="text-xs font-semibold text-slate-300">Workouts</span>
             </div>
             {activity.workouts!.map(w => (
@@ -273,7 +273,7 @@ export function Dashboard({ profile }: DashboardProps) {
         {/* Empty state */}
         {!activity.steps && !activity.sleep_hours && !activity.heart_rate_resting && (
           <button onClick={() => navigate('/checkin')}
-            className="w-full py-3 mt-1 rounded-xl border border-dashed border-white/20 text-slate-500 text-xs hover:border-cyan-500/40 hover:text-cyan-400 transition"
+            className="w-full py-3 mt-1 rounded-xl border border-dashed border-white/20 text-slate-500 text-xs hover:border-neon-teal/40 hover:text-neon-teal transition"
           >
             Tap to log today's Garmin data
           </button>
@@ -283,12 +283,12 @@ export function Dashboard({ profile }: DashboardProps) {
       {/* Quick Actions */}
       <div className="flex gap-3">
         <button onClick={() => navigate('/snap')}
-          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 text-white text-sm font-medium flex items-center justify-center gap-2"
+          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal/20 to-neon-pink/20 border border-neon-teal/30 text-white text-sm font-medium flex items-center justify-center gap-2"
         >
           <Camera size={16} /> Snap Food
         </button>
         <button onClick={() => navigate('/chat')}
-          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-white text-sm font-medium flex items-center justify-center gap-2"
+          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-pink/20 to-neon-pink/20 border border-neon-pink/30 text-white text-sm font-medium flex items-center justify-center gap-2"
         >
           <Zap size={16} /> Ask Coach
         </button>

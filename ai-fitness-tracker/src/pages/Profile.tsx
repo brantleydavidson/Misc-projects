@@ -88,7 +88,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
     <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
       {/* Header */}
       <div className="text-center py-4">
-        <div className="w-20 h-20 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+        <div className="w-20 h-20 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center">
           <Dumbbell size={36} className="text-white" />
         </div>
         <h1 className="text-xl font-bold gradient-text">JackedAI</h1>
@@ -116,15 +116,15 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
           <Row label="Calorie Target" value={`${macros.calories} cal`} highlight />
           <div className="border-t border-white/10 pt-2 mt-2 grid grid-cols-3 gap-3">
             <div className="text-center">
-              <div className="text-lg font-bold text-cyan-400">{macros.protein}g</div>
+              <div className="text-lg font-bold text-neon-teal">{macros.protein}g</div>
               <div className="text-[10px] text-slate-400">Protein</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-purple-400">{macros.carbs}g</div>
+              <div className="text-lg font-bold text-neon-pink">{macros.carbs}g</div>
               <div className="text-[10px] text-slate-400">Carbs</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-pink-400">{macros.fat}g</div>
+              <div className="text-lg font-bold text-neon-pink">{macros.fat}g</div>
               <div className="text-[10px] text-slate-400">Fat</div>
             </div>
           </div>
@@ -204,20 +204,20 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
               value={manualData.calories_burned} onChange={v => setManualData(d => ({ ...d, calories_burned: v }))} />
             <ManualInput icon={<Heart size={14} className="text-red-400" />} label="Avg Heart Rate"
               value={manualData.heart_rate_avg} onChange={v => setManualData(d => ({ ...d, heart_rate_avg: v }))} />
-            <ManualInput icon={<Heart size={14} className="text-pink-400" />} label="Resting HR"
+            <ManualInput icon={<Heart size={14} className="text-neon-pink" />} label="Resting HR"
               value={manualData.heart_rate_resting} onChange={v => setManualData(d => ({ ...d, heart_rate_resting: v }))} />
             <ManualInput icon={<Moon size={14} className="text-indigo-400" />} label="Sleep Hours"
               value={manualData.sleep_hours} onChange={v => setManualData(d => ({ ...d, sleep_hours: v }))} step="0.1" />
             <ManualInput icon={<Zap size={14} className="text-yellow-400" />} label="Active Minutes"
               value={manualData.active_minutes} onChange={v => setManualData(d => ({ ...d, active_minutes: v }))} />
-            <ManualInput icon={<Activity size={14} className="text-cyan-400" />} label="Body Battery"
+            <ManualInput icon={<Activity size={14} className="text-neon-teal" />} label="Body Battery"
               value={manualData.body_battery} onChange={v => setManualData(d => ({ ...d, body_battery: v }))} />
-            <ManualInput icon={<Activity size={14} className="text-purple-400" />} label="Stress Level"
+            <ManualInput icon={<Activity size={14} className="text-neon-pink" />} label="Stress Level"
               value={manualData.stress_level} onChange={v => setManualData(d => ({ ...d, stress_level: v }))} />
           </div>
 
           <button onClick={saveManualData}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-cyan-500 text-white text-sm font-semibold"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white text-sm font-semibold"
           >
             Save Activity Data
           </button>
@@ -298,7 +298,7 @@ function ManualInput({ icon, label, value, onChange, step }: {
         value={value || ''}
         onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
         placeholder="—"
-        className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-cyan-400 focus:outline-none"
+        className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
       />
     </div>
   );

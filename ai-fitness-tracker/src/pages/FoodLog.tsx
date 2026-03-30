@@ -69,9 +69,9 @@ export function FoodLog({ profile }: FoodLogProps) {
       {/* Macro summary */}
       <div className="glass rounded-2xl p-4">
         <div className="flex gap-4">
-          <MacroBar label="Protein" value={summary.protein} target={targets.protein} color="#22d3ee" />
-          <MacroBar label="Carbs" value={summary.carbs} target={targets.carbs} color="#a855f7" />
-          <MacroBar label="Fat" value={summary.fat} target={targets.fat} color="#f472b6" />
+          <MacroBar label="Protein" value={summary.protein} target={targets.protein} color="#00E5CC" />
+          <MacroBar label="Carbs" value={summary.carbs} target={targets.carbs} color="#FF2D78" />
+          <MacroBar label="Fat" value={summary.fat} target={targets.fat} color="#FF2D78" />
         </div>
       </div>
 

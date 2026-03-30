@@ -19,17 +19,17 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   moon: <Moon size={14} className="text-indigo-400" />,
   star: <Star size={14} className="text-yellow-400" />,
   heart: <Heart size={14} className="text-red-400" />,
-  activity: <Activity size={14} className="text-cyan-400" />,
+  activity: <Activity size={14} className="text-neon-teal" />,
   battery: <Battery size={14} className="text-green-400" />,
   wind: <Wind size={14} className="text-blue-400" />,
-  scale: <Scale size={14} className="text-purple-400" />,
-  percent: <Activity size={14} className="text-pink-400" />,
+  scale: <Scale size={14} className="text-neon-pink" />,
+  percent: <Activity size={14} className="text-neon-pink" />,
   footprints: <Footprints size={14} className="text-green-400" />,
   timer: <Timer size={14} className="text-yellow-400" />,
   flame: <Flame size={14} className="text-orange-400" />,
   zap: <Zap size={14} className="text-yellow-400" />,
-  brain: <Brain size={14} className="text-purple-400" />,
-  'arrow-up': <ArrowUp size={14} className="text-cyan-400" />,
+  brain: <Brain size={14} className="text-neon-pink" />,
+  'arrow-up': <ArrowUp size={14} className="text-neon-teal" />,
   map: <Map size={14} className="text-green-400" />,
 };
 
@@ -52,11 +52,11 @@ const PERIOD_CONFIG: Record<Period, {
     fields: MORNING_FIELDS,
   },
   midday: {
-    icon: <Sunset size={20} className="text-cyan-400" />,
+    icon: <Sunset size={20} className="text-neon-teal" />,
     title: 'Midday Check-in',
     subtitle: 'Activity progress and any workouts so far',
     color: 'cyan',
-    gradient: 'from-cyan-500/20 to-blue-500/20',
+    gradient: 'from-neon-teal/20 to-blue-500/20',
     fields: MIDDAY_FIELDS,
   },
   evening: {
@@ -64,7 +64,7 @@ const PERIOD_CONFIG: Record<Period, {
     title: 'Evening Wrap-up',
     subtitle: 'Final totals for the day',
     color: 'indigo',
-    gradient: 'from-indigo-500/20 to-purple-500/20',
+    gradient: 'from-indigo-500/20 to-neon-pink/20',
     fields: EVENING_FIELDS,
   },
 };
@@ -171,7 +171,7 @@ export function CheckIn() {
                 </div>
               )}
               {isCurrent && !done && (
-                <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-neon-teal animate-pulse" />
               )}
             </button>
           );
@@ -211,7 +211,7 @@ export function CheckIn() {
                   [field.key]: e.target.value ? Number(e.target.value) : undefined,
                 }))}
                 placeholder={field.placeholder}
-                className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-cyan-400 focus:outline-none"
+                className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
               />
             </div>
           ))}
@@ -221,7 +221,7 @@ export function CheckIn() {
           className={`w-full py-3 rounded-xl text-white text-sm font-semibold transition ${
             saved
               ? 'bg-green-600'
-              : 'bg-gradient-to-r from-cyan-500 to-purple-500'
+              : 'bg-gradient-to-r from-neon-teal to-neon-pink'
           }`}
         >
           {saved ? '✓ Saved!' : checkIns[activePeriod] ? 'Update Check-in' : 'Save Check-in'}
@@ -233,10 +233,10 @@ export function CheckIn() {
         <div className="glass rounded-2xl p-4 space-y-3">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Dumbbell size={16} className="text-purple-400" /> Workouts
+              <Dumbbell size={16} className="text-neon-pink" /> Workouts
             </h3>
             <button onClick={() => setShowWorkoutForm(!showWorkoutForm)}
-              className="text-xs text-cyan-400 flex items-center gap-1"
+              className="text-xs text-neon-teal flex items-center gap-1"
             >
               {showWorkoutForm ? <X size={14} /> : <Plus size={14} />}
               {showWorkoutForm ? 'Cancel' : 'Add Workout'}
@@ -274,7 +274,7 @@ export function CheckIn() {
                     <button key={t} onClick={() => setWorkout(w => ({ ...w, type: t }))}
                       className={`px-2.5 py-1.5 rounded-lg text-xs transition ${
                         workout.type === t
-                          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                          ? 'bg-neon-pink/20 text-neon-pink border border-neon-pink/50'
                           : 'bg-white/5 text-slate-400 border border-white/10'
                       }`}
                     >{t}</button>
@@ -286,35 +286,35 @@ export function CheckIn() {
                   <label className="text-[10px] font-medium text-slate-400 mb-1 block">Name (optional)</label>
                   <input value={workout.name || ''} onChange={e => setWorkout(w => ({ ...w, name: e.target.value }))}
                     placeholder="e.g. Upper Body Push"
-                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-purple-400 focus:outline-none" />
+                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-pink focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-[10px] font-medium text-slate-400 mb-1 block">Duration (min)</label>
                   <input type="number" value={workout.duration_minutes || ''} onChange={e => setWorkout(w => ({ ...w, duration_minutes: Number(e.target.value) }))}
                     placeholder="45"
-                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-purple-400 focus:outline-none" />
+                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-pink focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-[10px] font-medium text-slate-400 mb-1 block">Calories Burned</label>
                   <input type="number" value={workout.calories_burned || ''} onChange={e => setWorkout(w => ({ ...w, calories_burned: Number(e.target.value) }))}
                     placeholder="300"
-                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-purple-400 focus:outline-none" />
+                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-pink focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-[10px] font-medium text-slate-400 mb-1 block">Avg HR</label>
                   <input type="number" value={workout.avg_heart_rate || ''} onChange={e => setWorkout(w => ({ ...w, avg_heart_rate: Number(e.target.value) }))}
                     placeholder="140"
-                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-purple-400 focus:outline-none" />
+                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-pink focus:outline-none" />
                 </div>
               </div>
               <div>
                 <label className="text-[10px] font-medium text-slate-400 mb-1 block">Notes (optional)</label>
                 <input value={workout.notes || ''} onChange={e => setWorkout(w => ({ ...w, notes: e.target.value }))}
                   placeholder="e.g. Felt strong today, PR on bench"
-                  className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-purple-400 focus:outline-none" />
+                  className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-pink focus:outline-none" />
               </div>
               <button onClick={handleAddWorkout}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-neon-pink to-neon-pink text-white text-sm font-semibold"
               >
                 Log Workout
               </button>

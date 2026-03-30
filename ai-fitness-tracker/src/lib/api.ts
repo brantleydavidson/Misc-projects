@@ -57,6 +57,18 @@ export async function generateMealPlan(profile: UserProfile): Promise<MealPlanRe
   return post<MealPlanResponse>('meal-plan', { profile });
 }
 
+export interface OnboardingResponse {
+  message: string;
+}
+
+export async function sendOnboarding(
+  messages: ChatMessage[],
+  collectedData: Record<string, unknown>,
+  turn: number
+): Promise<OnboardingResponse> {
+  return post<OnboardingResponse>('onboarding', { messages, collectedData, turn });
+}
+
 export async function getGarminAuthUrl(): Promise<{ url: string }> {
   return post<{ url: string }>('garmin-auth', { action: 'get_auth_url' });
 }

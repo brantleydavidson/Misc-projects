@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { ChevronRight, ChevronLeft, Dumbbell } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Dumbbell, Send, Zap, ChevronRight } from 'lucide-react';
 import type { UserProfile } from '../types';
-import { calculateMacros, calculateWaterTarget, calculateBMR, calculateTDEE, getActivityMultiplier } from '../lib/calculations';
+import { sendOnboarding } from '../lib/api';
+import { calculateMacros, calculateWaterTarget, calculateBMR, calculateTDEE } from '../lib/calculations';
 
 interface OnboardingProps {
   profile: UserProfile;
@@ -9,347 +10,564 @@ interface OnboardingProps {
   onComplete: () => void;
 }
 
-const SECTIONS = ['stats', 'lifestyle', 'food', 'snacks', 'review'] as const;
+type Phase = 'arrival' | 'conversation' | 'reveal' | 'commit';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+const TOTAL_TURNS = 9;
 
 export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
-  const [section, setSection] = useState(0);
-  const [localData, setLocalData] = useState<Partial<UserProfile>>(profile);
+  const [phase, setPhase] = useState<Phase>('arrival');
+  const [arrivalStep, setArrivalStep] = useState(0);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [turn, setTurn] = useState(0);
+  const [collectedData, setCollectedData] = useState<Partial<UserProfile>>(profile);
+  const [revealStep, setRevealStep] = useState(0);
+  const [showPlan, setShowPlan] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  function update(data: Partial<UserProfile>) {
-    setLocalData(prev => ({ ...prev, ...data }));
+  // Arrival animation sequence
+  useEffect(() => {
+    if (phase !== 'arrival') return;
+    const timers = [
+      setTimeout(() => setArrivalStep(1), 500),   // line appears
+      setTimeout(() => setArrivalStep(2), 1000),   // grid fades in
+      setTimeout(() => setArrivalStep(3), 1600),   // logo appears
+      setTimeout(() => setArrivalStep(4), 2200),   // name types out
+      setTimeout(() => setArrivalStep(5), 3000),   // tagline
+      setTimeout(() => setArrivalStep(6), 3600),   // button
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [phase]);
+
+  // Auto-scroll messages
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
+
+  // Focus input after AI responds
+  useEffect(() => {
+    if (!loading && phase === 'conversation') {
+      inputRef.current?.focus();
+    }
+  }, [loading, phase]);
+
+  // Reveal animation sequence
+  useEffect(() => {
+    if (phase !== 'reveal') return;
+    const steps = [
+      setTimeout(() => setRevealStep(1), 600),
+      setTimeout(() => setRevealStep(2), 1200),
+      setTimeout(() => setRevealStep(3), 1800),
+      setTimeout(() => setRevealStep(4), 2400),
+      setTimeout(() => setRevealStep(5), 3000),
+      setTimeout(() => setShowPlan(true), 3800),
+    ];
+    return () => steps.forEach(clearTimeout);
+  }, [phase]);
+
+  const startConversation = useCallback(() => {
+    setPhase('conversation');
+  }, []);
+
+  // Parse user message to extract structured data
+  function extractData(userMsg: string, currentTurn: number): Partial<UserProfile> {
+    const data: Partial<UserProfile> = {};
+    const msg = userMsg.toLowerCase();
+
+    if (currentTurn === 0) {
+      // Name turn — the first message IS their name
+      // (We store it as part of collectedData for context, not in UserProfile)
+    }
+
+    // Extract numbers for stats
+    const numbers = userMsg.match(/\d+\.?\d*/g)?.map(Number) || [];
+
+    if (currentTurn === 1) {
+      // Goal/mission
+      if (msg.includes('lose') || msg.includes('fat') || msg.includes('cut') || msg.includes('lean'))
+        data.goal_description = 'lose fat';
+      else if (msg.includes('muscle') || msg.includes('bulk') || msg.includes('gain') || msg.includes('mass'))
+        data.goal_description = 'build muscle';
+      else if (msg.includes('recomp'))
+        data.goal_description = 'recomp';
+      else if (msg.includes('strong'))
+        data.goal_description = 'get stronger';
+      else
+        data.goal_description = userMsg.trim().substring(0, 100);
+    }
+
+    if (currentTurn === 2) {
+      // Stats - age, sex, height, weight, goal weight
+      if (numbers.length >= 3) {
+        // Try to guess: age is usually 15-80, height 140-220cm, weight 40-200kg
+        const sorted = [...numbers].sort((a, b) => a - b);
+        if (sorted.length >= 4) {
+          data.age = sorted[0] < 80 ? sorted[0] : undefined;
+          data.height_cm = sorted.find(n => n >= 140 && n <= 230);
+          const weights = sorted.filter(n => n >= 40 && n <= 200 && n !== data.height_cm && n !== data.age);
+          if (weights.length >= 2) {
+            data.current_weight_kg = weights[weights.length - 1] >= weights[0] ? weights[weights.length - 1] : weights[0];
+            data.goal_weight_kg = weights[weights.length - 1] >= weights[0] ? weights[0] : weights[weights.length - 1];
+          } else if (weights.length === 1) {
+            data.current_weight_kg = weights[0];
+          }
+        }
+      }
+      if (msg.includes('male') && !msg.includes('female')) data.biological_sex = 'male';
+      if (msg.includes('female') || msg.includes('woman') || msg.includes('girl')) data.biological_sex = 'female';
+    }
+
+    if (currentTurn === 3) {
+      // Movement - job, exercise freq, types
+      if (msg.includes('desk')) data.job_type = 'desk';
+      else if (msg.includes('feet') || msg.includes('stand')) data.job_type = 'on_feet';
+      else if (msg.includes('physical') || msg.includes('labor') || msg.includes('construction')) data.job_type = 'physical';
+      else if (msg.includes('mix')) data.job_type = 'mixed';
+
+      const freqMatch = msg.match(/(\d)\s*(?:times|days|x)/);
+      if (freqMatch) data.exercise_frequency = Number(freqMatch[1]);
+      else if (numbers.length > 0 && numbers[0] <= 7) data.exercise_frequency = numbers[0];
+    }
+
+    if (currentTurn === 4) {
+      // Recovery
+      const sleepMatch = msg.match(/(\d+\.?\d*)\s*(?:hours|hrs|h)/);
+      if (sleepMatch) data.sleep_hours = Number(sleepMatch[1]);
+      else if (numbers.length > 0 && numbers[0] <= 12) data.sleep_hours = numbers[0];
+
+      if (msg.includes('low') && msg.includes('stress')) data.stress_level = 'low';
+      else if (msg.includes('high') && msg.includes('stress')) data.stress_level = 'high';
+      else if (msg.includes('moderate') || msg.includes('medium')) data.stress_level = 'moderate';
+
+      const alcoholMatch = msg.match(/(\d+)\s*(?:drinks?|beers?|glasses?)/);
+      if (alcoholMatch) data.alcohol_per_week = alcoholMatch[0];
+      else if (msg.includes('none') || msg.includes("don't drink") || msg.includes('no alcohol'))
+        data.alcohol_per_week = '0';
+    }
+
+    if (currentTurn === 5) {
+      // Food preferences
+      if (msg.includes('scratch')) data.cooking_style = 'scratch';
+      else if (msg.includes('quick') || msg.includes('fast') || msg.includes('easy')) data.cooking_style = 'quick';
+      else if (msg.includes('prep') || msg.includes('batch')) data.cooking_style = 'meal_prep';
+
+      const advMatch = msg.match(/(\d+)\s*(?:\/10|out of)/);
+      if (advMatch) data.food_adventurousness = Number(advMatch[1]);
+    }
+
+    if (currentTurn === 6) {
+      // Snacks
+      if (msg.includes('hunger') || msg.includes('hungry')) data.snack_reason = 'hunger';
+      else if (msg.includes('bore') || msg.includes('boredom')) data.snack_reason = 'boredom';
+      else if (msg.includes('habit')) data.snack_reason = 'habit';
+
+      if (msg.includes('sweet') && msg.includes('savory')) data.snack_preference = 'both';
+      else if (msg.includes('sweet')) data.snack_preference = 'sweet';
+      else if (msg.includes('savory') || msg.includes('salty')) data.snack_preference = 'savory';
+
+      data.late_night_snacking = msg.includes('late night') || msg.includes('midnight') ||
+        (msg.includes('night') && msg.includes('snack'));
+    }
+
+    if (currentTurn === 7) {
+      // Supplements & peptides
+      const supps: string[] = [];
+      const peps: string[] = [];
+      const suppKeywords = ['creatine', 'protein', 'whey', 'casein', 'pre-workout', 'preworkout',
+        'multivitamin', 'vitamin', 'fish oil', 'omega', 'magnesium', 'zinc', 'ashwagandha',
+        'caffeine', 'bcaa', 'eaa', 'collagen', 'glutamine', 'beta-alanine', 'citrulline'];
+      const pepKeywords = ['bpc-157', 'bpc 157', 'tb-500', 'tb 500', 'ghk', 'semaglutide',
+        'tirzepatide', 'ipamorelin', 'cjc-1295', 'cjc 1295', 'mk-677', 'mk677'];
+
+      suppKeywords.forEach(s => { if (msg.includes(s)) supps.push(s); });
+      pepKeywords.forEach(p => { if (msg.includes(p)) peps.push(p); });
+
+      if (supps.length) data.supplements = supps;
+      if (peps.length) data.peptides = peps;
+      data.supplement_notes = userMsg.trim();
+    }
+
+    if (currentTurn === 8) {
+      // Health & wearable
+      if (msg.includes('garmin')) { data.has_wearable = true; data.wearable_type = 'garmin'; }
+      else if (msg.includes('apple watch')) { data.has_wearable = true; data.wearable_type = 'apple_watch'; }
+      else if (msg.includes('whoop')) { data.has_wearable = true; data.wearable_type = 'whoop'; }
+      else if (msg.includes('oura')) { data.has_wearable = true; data.wearable_type = 'oura'; }
+      else if (msg.includes('fitbit')) { data.has_wearable = true; data.wearable_type = 'fitbit'; }
+
+      data.wildcard_notes = userMsg.trim();
+    }
+
+    if (currentTurn === 9) {
+      // Pace
+      if (msg.includes('steady') || msg.includes('slow')) data.weight_loss_pace = 'steady';
+      else if (msg.includes('aggressive') || msg.includes('fast')) data.weight_loss_pace = 'aggressive';
+      else data.weight_loss_pace = 'moderate';
+    }
+
+    return data;
   }
 
-  function next() {
-    onUpdate(localData);
-    if (section < SECTIONS.length - 1) {
-      setSection(s => s + 1);
-    } else {
-      // Calculate targets and finish
-      const macros = calculateMacros(localData as UserProfile);
-      const water = calculateWaterTarget(localData as UserProfile);
-      const bmr = calculateBMR(localData as UserProfile);
-      const tdee = calculateTDEE(localData as UserProfile);
-      onUpdate({
-        ...localData,
-        bmr, tdee,
-        calorie_target: macros.calories,
-        protein_target: macros.protein,
-        carb_target: macros.carbs,
-        fat_target: macros.fat,
-        water_target_liters: water,
-        onboarding_complete: true,
-      });
-      onComplete();
+  async function handleSend(text?: string) {
+    const msg = text || input.trim();
+    if (!msg || loading) return;
+    setInput('');
+
+    const userMsg: Message = { role: 'user', content: msg };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    setLoading(true);
+
+    // Extract data from user message
+    const extracted = extractData(msg, turn);
+    const newCollected = { ...collectedData, ...extracted };
+    setCollectedData(newCollected);
+
+    // Check if conversation is complete
+    if (turn >= TOTAL_TURNS) {
+      // Move to reveal phase
+      setLoading(false);
+      onUpdate(newCollected);
+      setPhase('reveal');
+      return;
+    }
+
+    try {
+      const response = await sendOnboarding(updated, newCollected as Record<string, unknown>, turn);
+      const assistantMsg: Message = { role: 'assistant', content: response.message };
+      setMessages(prev => [...prev, assistantMsg]);
+      setTurn(t => t + 1);
+    } catch (err: any) {
+      const errMsg: Message = {
+        role: 'assistant',
+        content: "Connection glitch. Try that again.",
+      };
+      setMessages(prev => [...prev, errMsg]);
+    } finally {
+      setLoading(false);
     }
   }
 
-  function back() {
-    if (section > 0) setSection(s => s - 1);
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   }
 
-  return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
-      {/* Header */}
-      <div className="px-4 pt-8 pb-4 text-center">
-        <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
-          <Dumbbell size={32} className="text-white" />
-        </div>
-        <h1 className="text-2xl font-bold gradient-text">JackedAI</h1>
-        <p className="text-slate-400 text-sm mt-1">Let's build your plan</p>
-      </div>
+  function finishOnboarding() {
+    const macros = calculateMacros(collectedData as UserProfile);
+    const water = calculateWaterTarget(collectedData as UserProfile);
+    const bmr = calculateBMR(collectedData as UserProfile);
+    const tdee = calculateTDEE(collectedData as UserProfile);
+    onUpdate({
+      ...collectedData,
+      bmr,
+      tdee,
+      calorie_target: macros.calories,
+      protein_target: macros.protein,
+      carb_target: macros.carbs,
+      fat_target: macros.fat,
+      water_target_liters: water,
+      onboarding_complete: true,
+    });
+    onComplete();
+  }
 
-      {/* Progress */}
-      <div className="flex gap-1.5 px-6 mb-6">
-        {SECTIONS.map((_, i) => (
-          <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-            i <= section ? 'bg-gradient-to-r from-cyan-400 to-purple-500' : 'bg-white/10'
-          }`} />
-        ))}
-      </div>
+  // ─── PHASE 0: ARRIVAL ──────────────────────────────────
+  if (phase === 'arrival') {
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Grid background */}
+        <div className={`absolute inset-0 grid-bg transition-opacity duration-1000 ${arrivalStep >= 2 ? 'opacity-100' : 'opacity-0'}`} />
 
-      {/* Content */}
-      <div className="flex-1 px-6 pb-8 overflow-y-auto no-scrollbar">
-        {section === 0 && <StatsSection data={localData} onChange={update} />}
-        {section === 1 && <LifestyleSection data={localData} onChange={update} />}
-        {section === 2 && <FoodSection data={localData} onChange={update} />}
-        {section === 3 && <SnackSection data={localData} onChange={update} />}
-        {section === 4 && <ReviewSection data={localData} />}
-      </div>
+        {/* Scanlines */}
+        <div className="absolute inset-0 scanlines" />
 
-      {/* Navigation */}
-      <div className="flex gap-3 px-6 pb-8">
-        {section > 0 && (
-          <button onClick={back} className="px-6 py-3 rounded-xl glass text-slate-300 flex items-center gap-1">
-            <ChevronLeft size={16} /> Back
+        {/* Center line */}
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[2px] bg-neon-teal transition-all duration-500 ${
+          arrivalStep >= 1 ? 'w-48 opacity-100' : 'w-0 opacity-0'
+        }`} style={{ boxShadow: '0 0 20px #00E5CC, 0 0 40px #00E5CC' }} />
+
+        {/* Logo */}
+        <div className={`relative z-10 flex flex-col items-center transition-all duration-700 ${
+          arrivalStep >= 3 ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+        }`}>
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal mb-6">
+            <Dumbbell size={40} className="text-white" />
+          </div>
+
+          {/* Name */}
+          <h1 className={`font-display text-4xl tracking-wider text-neon-teal glow-text transition-opacity duration-500 ${
+            arrivalStep >= 4 ? 'opacity-100' : 'opacity-0'
+          }`}>
+            JACKEDAI
+          </h1>
+
+          {/* Tagline */}
+          <p className={`font-ui text-sm text-chrome/60 mt-3 tracking-widest uppercase transition-opacity duration-500 ${
+            arrivalStep >= 5 ? 'opacity-100' : 'opacity-0'
+          }`}>
+            Built in the Neon
+          </p>
+
+          {/* CTA */}
+          <button
+            onClick={startConversation}
+            className={`mt-10 px-8 py-4 rounded-xl font-ui font-semibold text-sm uppercase tracking-widest
+              bg-neon-teal/10 text-neon-teal border border-neon-teal/40
+              glow-breathe btn-neon transition-all duration-500 ${
+              arrivalStep >= 6 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
+          >
+            Initialize Protocol
           </button>
-        )}
-        <button onClick={next}
-          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-semibold flex items-center justify-center gap-1"
-        >
-          {section === SECTIONS.length - 1 ? "Let's Get Jacked" : 'Next'} <ChevronRight size={16} />
-        </button>
+        </div>
       </div>
-    </div>
-  );
-}
-
-function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="mb-6">
-      <h2 className="text-xl font-bold text-white">{title}</h2>
-      <p className="text-sm text-slate-400 mt-1">{subtitle}</p>
-    </div>
-  );
-}
-
-function Input({ label, value, onChange, type = 'text', placeholder = '' }: {
-  label: string; value: string | number | undefined; onChange: (v: string) => void; type?: string; placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-300 mb-1.5">{label}</label>
-      <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full bg-white/5 rounded-xl px-4 py-3 text-white placeholder-slate-500 border border-white/10 focus:border-cyan-400 focus:outline-none text-sm" />
-    </div>
-  );
-}
-
-function Select({ label, value, onChange, options }: {
-  label: string; value: string | undefined; onChange: (v: string) => void; options: { value: string; label: string }[];
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-300 mb-1.5">{label}</label>
-      <div className="flex flex-wrap gap-2">
-        {options.map(opt => (
-          <button key={opt.value} type="button" onClick={() => onChange(opt.value)}
-            className={`px-4 py-2 rounded-xl text-sm transition ${value === opt.value
-              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-              : 'bg-white/5 text-slate-400 border border-white/10'}`}
-          >{opt.label}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatsSection({ data, onChange }: { data: Partial<UserProfile>; onChange: (d: Partial<UserProfile>) => void }) {
-  return (
-    <div className="space-y-4">
-      <SectionTitle title="Your Stats" subtitle="The basics — so we can dial in your macros perfectly." />
-      <Input label="Age" value={data.age} onChange={v => onChange({ age: Number(v) })} type="number" placeholder="30" />
-      <Select label="Biological Sex" value={data.biological_sex} onChange={v => onChange({ biological_sex: v as any })}
-        options={[{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]} />
-      <Input label="Height (cm)" value={data.height_cm} onChange={v => onChange({ height_cm: Number(v) })} type="number" placeholder="180" />
-      <Input label="Current Weight (kg)" value={data.current_weight_kg} onChange={v => onChange({ current_weight_kg: Number(v) })} type="number" placeholder="85" />
-      <Input label="Goal Weight (kg)" value={data.goal_weight_kg} onChange={v => onChange({ goal_weight_kg: Number(v) })} type="number" placeholder="78" />
-      <Select label="How fast?" value={data.weight_loss_pace} onChange={v => onChange({ weight_loss_pace: v as any })}
-        options={[
-          { value: 'steady', label: 'Steady (~1 lb/wk)' },
-          { value: 'moderate', label: 'Moderate (~1.2 lb/wk)' },
-          { value: 'aggressive', label: 'Aggressive (~1.5 lb/wk)' },
-        ]} />
-    </div>
-  );
-}
-
-function LifestyleSection({ data, onChange }: { data: Partial<UserProfile>; onChange: (d: Partial<UserProfile>) => void }) {
-  return (
-    <div className="space-y-4">
-      <SectionTitle title="Your Lifestyle" subtitle="How you move and live — this shapes your calorie needs." />
-      <Select label="Job Type" value={data.job_type} onChange={v => onChange({ job_type: v })}
-        options={[
-          { value: 'desk', label: 'Desk job' },
-          { value: 'on_feet', label: 'On my feet' },
-          { value: 'physical', label: 'Physical / manual' },
-          { value: 'mixed', label: 'Mix of both' },
-        ]} />
-      <Input label="Workouts per week" value={data.exercise_frequency} onChange={v => onChange({ exercise_frequency: Number(v) })} type="number" placeholder="4" />
-      <Input label="Sleep hours (typical)" value={data.sleep_hours} onChange={v => onChange({ sleep_hours: Number(v) })} type="number" placeholder="7" />
-      <Select label="Stress Level" value={data.stress_level} onChange={v => onChange({ stress_level: v as any })}
-        options={[
-          { value: 'low', label: 'Low' },
-          { value: 'moderate', label: 'Moderate' },
-          { value: 'high', label: 'High' },
-        ]} />
-      <Input label="Alcohol per week (drinks)" value={data.alcohol_per_week} onChange={v => onChange({ alcohol_per_week: v })} placeholder="e.g. 3-4 beers" />
-    </div>
-  );
-}
-
-function FoodSection({ data, onChange }: { data: Partial<UserProfile>; onChange: (d: Partial<UserProfile>) => void }) {
-  const [mealInput, setMealInput] = useState('');
-  const [hateInput, setHateInput] = useState('');
-
-  function addMeal() {
-    if (!mealInput.trim()) return;
-    onChange({ favorite_meals: [...(data.favorite_meals || []), mealInput.trim()] });
-    setMealInput('');
+    );
   }
 
-  function addHate() {
-    if (!hateInput.trim()) return;
-    onChange({ hated_foods: [...(data.hated_foods || []), hateInput.trim()] });
-    setHateInput('');
-  }
+  // ─── PHASE 1: CONVERSATION ─────────────────────────────
+  if (phase === 'conversation') {
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col relative">
+        {/* Subtle grid */}
+        <div className="absolute inset-0 grid-bg opacity-30" />
 
-  return (
-    <div className="space-y-4">
-      <SectionTitle title="Food Preferences" subtitle="What do you love to eat? We'll build your plan around it." />
-      <div>
-        <label className="block text-xs font-medium text-slate-300 mb-1.5">Favorite meals / dishes</label>
-        <div className="flex gap-2">
-          <input value={mealInput} onChange={e => setMealInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMeal()}
-            placeholder="e.g. Tacos, Stir fry..." className="flex-1 bg-white/5 rounded-xl px-4 py-3 text-white placeholder-slate-500 border border-white/10 focus:border-cyan-400 focus:outline-none text-sm" />
-          <button onClick={addMeal} className="px-4 py-3 rounded-xl bg-cyan-500/20 text-cyan-400 text-sm">Add</button>
+        {/* Header */}
+        <div className="relative z-10 px-4 pt-6 pb-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
+            <Zap size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className="font-ui font-semibold text-chrome text-sm">APEX</h1>
+            <p className="text-[10px] text-chrome/40 font-body">Performance Coach</p>
+          </div>
+          {/* Turn indicator */}
+          <div className="ml-auto flex gap-1">
+            {Array.from({ length: TOTAL_TURNS + 1 }).map((_, i) => (
+              <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                i < turn ? 'bg-neon-teal glow-teal' : i === turn ? 'bg-neon-teal/50' : 'bg-white/10'
+              }`} />
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {(data.favorite_meals || []).map((m, i) => (
-            <span key={i} className="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs border border-cyan-500/20">
-              {m} <button onClick={() => onChange({ favorite_meals: data.favorite_meals?.filter((_, j) => j !== i) })} className="ml-1">×</button>
-            </span>
+
+        {/* Messages */}
+        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 pb-4 no-scrollbar space-y-3">
+          {messages.length === 0 && !loading && (
+            <div className="mt-8 text-center fade-up">
+              <p className="text-chrome/50 font-body text-sm mb-6">
+                Tell APEX your name to begin.
+              </p>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} fade-up`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                msg.role === 'user'
+                  ? 'bg-neon-teal/15 text-chrome border border-neon-teal/20 rounded-br-md'
+                  : 'glass text-chrome/90 rounded-bl-md hud-corners'
+              }`}>
+                <div className="whitespace-pre-wrap relative z-10">{msg.content}</div>
+              </div>
+            </div>
           ))}
-        </div>
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-slate-300 mb-1.5">Foods you hate</label>
-        <div className="flex gap-2">
-          <input value={hateInput} onChange={e => setHateInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHate()}
-            placeholder="e.g. Mushrooms..." className="flex-1 bg-white/5 rounded-xl px-4 py-3 text-white placeholder-slate-500 border border-white/10 focus:border-cyan-400 focus:outline-none text-sm" />
-          <button onClick={addHate} className="px-4 py-3 rounded-xl bg-red-500/20 text-red-400 text-sm">Add</button>
-        </div>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {(data.hated_foods || []).map((m, i) => (
-            <span key={i} className="px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-xs border border-red-500/20">
-              {m} <button onClick={() => onChange({ hated_foods: data.hated_foods?.filter((_, j) => j !== i) })} className="ml-1">×</button>
-            </span>
-          ))}
-        </div>
-      </div>
-      <Select label="Cooking Style" value={data.cooking_style} onChange={v => onChange({ cooking_style: v as any })}
-        options={[
-          { value: 'scratch', label: 'From scratch' },
-          { value: 'quick', label: 'Quick meals' },
-          { value: 'meal_prep', label: 'Batch / meal prep' },
-        ]} />
-      <div>
-        <label className="block text-xs font-medium text-slate-300 mb-1.5">Food adventurousness (1-10)</label>
-        <input type="range" min="1" max="10" value={data.food_adventurousness || 5} onChange={e => onChange({ food_adventurousness: Number(e.target.value) })}
-          className="w-full accent-cyan-400" />
-        <div className="flex justify-between text-[10px] text-slate-500">
-          <span>Stick to what I know</span>
-          <span className="text-cyan-400 font-bold">{data.food_adventurousness || 5}</span>
-          <span>I'll try anything</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function SnackSection({ data, onChange }: { data: Partial<UserProfile>; onChange: (d: Partial<UserProfile>) => void }) {
-  const [snackInput, setSnackInput] = useState('');
-
-  function addSnack() {
-    if (!snackInput.trim()) return;
-    onChange({ current_snacks: [...(data.current_snacks || []), snackInput.trim()] });
-    setSnackInput('');
-  }
-
-  return (
-    <div className="space-y-4">
-      <SectionTitle title="Snack Habits" subtitle="No judgment — I just need to know what we're working with." />
-      <div>
-        <label className="block text-xs font-medium text-slate-300 mb-1.5">Current go-to snacks</label>
-        <div className="flex gap-2">
-          <input value={snackInput} onChange={e => setSnackInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSnack()}
-            placeholder="e.g. Chips, granola bar..." className="flex-1 bg-white/5 rounded-xl px-4 py-3 text-white placeholder-slate-500 border border-white/10 focus:border-cyan-400 focus:outline-none text-sm" />
-          <button onClick={addSnack} className="px-4 py-3 rounded-xl bg-cyan-500/20 text-cyan-400 text-sm">Add</button>
+          {loading && (
+            <div className="flex justify-start">
+              <div className="glass rounded-2xl rounded-bl-md px-4 py-3">
+                <div className="flex gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-neon-teal neon-pulse" />
+                  <div className="w-2 h-2 rounded-full bg-neon-teal neon-pulse" style={{ animationDelay: '0.2s' }} />
+                  <div className="w-2 h-2 rounded-full bg-neon-teal neon-pulse" style={{ animationDelay: '0.4s' }} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {(data.current_snacks || []).map((s, i) => (
-            <span key={i} className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-xs border border-purple-500/20">
-              {s} <button onClick={() => onChange({ current_snacks: data.current_snacks?.filter((_, j) => j !== i) })} className="ml-1">×</button>
-            </span>
-          ))}
-        </div>
-      </div>
-      <Select label="Why do you snack?" value={data.snack_reason} onChange={v => onChange({ snack_reason: v as any })}
-        options={[
-          { value: 'hunger', label: 'Genuine hunger' },
-          { value: 'boredom', label: 'Boredom' },
-          { value: 'habit', label: 'Force of habit' },
-        ]} />
-      <Select label="Sweet or savory?" value={data.snack_preference} onChange={v => onChange({ snack_preference: v as any })}
-        options={[
-          { value: 'sweet', label: 'Sweet' },
-          { value: 'savory', label: 'Savory' },
-          { value: 'both', label: 'Both' },
-        ]} />
-      <Select label="Late night snacking?" value={data.late_night_snacking === undefined ? undefined : data.late_night_snacking ? 'yes' : 'no'}
-        onChange={v => onChange({ late_night_snacking: v === 'yes' })}
-        options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
-    </div>
-  );
-}
 
-function ReviewSection({ data }: { data: Partial<UserProfile> }) {
-  const macros = calculateMacros(data as UserProfile);
-  const bmr = calculateBMR(data as UserProfile);
-  const tdee = calculateTDEE(data as UserProfile);
-  const { label } = getActivityMultiplier(data as UserProfile);
-  const water = calculateWaterTarget(data as UserProfile);
-
-  return (
-    <div className="space-y-4">
-      <SectionTitle title="Your Plan" subtitle="Here's what JackedAI calculated based on your info." />
-
-      <div className="glass rounded-2xl p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-cyan-400">Calorie Calculation</h3>
-        <div className="space-y-1 text-sm">
-          <Row label="BMR (Mifflin-St Jeor)" value={`${Math.round(bmr)} cal`} />
-          <Row label="Activity Level" value={label} />
-          <Row label="TDEE (maintenance)" value={`${tdee} cal`} />
-          <Row label="Deficit" value="-500 cal" />
-          <div className="border-t border-white/10 pt-2 mt-2">
-            <Row label="Daily Target" value={`${macros.calories} cal`} highlight />
+        {/* Input */}
+        <div className="relative z-10 flex-shrink-0 px-4 pb-8 pt-2">
+          <div className="flex gap-2 items-end glass rounded-2xl p-2">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={turn === 0 ? "Your name..." : "Type your response..."}
+              rows={1}
+              className="flex-1 bg-transparent text-chrome text-sm placeholder-chrome/30 resize-none focus:outline-none px-2 py-1.5 max-h-24 font-ui"
+            />
+            <button
+              onClick={() => handleSend()}
+              disabled={loading || !input.trim()}
+              className="w-9 h-9 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink flex items-center justify-center disabled:opacity-20 transition btn-neon flex-shrink-0"
+            >
+              <Send size={16} className="text-white" />
+            </button>
           </div>
         </div>
       </div>
+    );
+  }
 
-      <div className="glass rounded-2xl p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-purple-400">Daily Macros</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <MacroCard label="Protein" value={`${macros.protein}g`} color="text-cyan-400" />
-          <MacroCard label="Carbs" value={`${macros.carbs}g`} color="text-purple-400" />
-          <MacroCard label="Fat" value={`${macros.fat}g`} color="text-pink-400" />
+  // ─── PHASE 2: THE REVEAL ───────────────────────────────
+  if (phase === 'reveal') {
+    const macros = calculateMacros(collectedData as UserProfile);
+    const bmr = calculateBMR(collectedData as UserProfile);
+    const tdee = calculateTDEE(collectedData as UserProfile);
+    const water = calculateWaterTarget(collectedData as UserProfile);
+
+    const processingLines = [
+      `> Parsing goal: ${collectedData.goal_description || 'optimize performance'}...`,
+      `> Cross-referencing: ${collectedData.exercise_frequency || '?'}x/week training + ${collectedData.job_type || 'unknown'} lifestyle...`,
+      `> Calculating BMR via Mifflin-St Jeor...`,
+      `> Mapping activity multiplier → TDEE...`,
+      `> Computing macro split (protein-forward)...`,
+      collectedData.supplements?.length ? `> Factoring supplement stack: ${collectedData.supplements.join(', ')}...` : '> Checking supplement considerations...',
+      `> PROTOCOL READY.`,
+    ];
+
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden px-6">
+        <div className="absolute inset-0 grid-bg opacity-40" />
+        <div className="absolute inset-0 scanlines" />
+
+        <div className="relative z-10 w-full max-w-md">
+          {/* Processing lines */}
+          {!showPlan && (
+            <div className="space-y-2 font-body text-xs">
+              <p className="font-display text-sm text-neon-teal glow-text mb-6 uppercase tracking-wider">
+                {revealStep < 6 ? 'Analyzing profile...' : 'Analysis complete'}
+              </p>
+              {processingLines.map((line, i) => (
+                <div key={i} className={`transition-all duration-300 ${
+                  i < revealStep ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'
+                }`}>
+                  <span className={i === processingLines.length - 1 && revealStep >= processingLines.length
+                    ? 'text-neon-teal glow-text' : 'text-chrome/60'}>
+                    {line}
+                  </span>
+                  {i < revealStep - 1 && <span className="text-neon-teal ml-2">✓</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Plan card */}
+          {showPlan && (
+            <div className="fade-up">
+              <div className="glass rounded-2xl p-5 border border-neon-teal/20 glow-teal">
+                <h2 className="font-display text-sm text-neon-teal uppercase tracking-wider mb-4">Your Protocol</h2>
+
+                <div className="space-y-3 font-body text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-chrome/60">BMR</span>
+                    <span className="text-chrome font-data">{Math.round(bmr)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-chrome/60">TDEE (maintenance)</span>
+                    <span className="text-chrome font-data">{tdee}</span>
+                  </div>
+                  <div className="border-t border-neon-teal/10 pt-3">
+                    <div className="flex justify-between">
+                      <span className="text-chrome/60">Daily Target</span>
+                      <span className="text-neon-teal font-data font-bold text-lg glow-text">{macros.calories} cal</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Macro bars */}
+                <div className="grid grid-cols-3 gap-3 mt-4">
+                  <div className="text-center p-3 rounded-xl bg-neon-teal/5 border border-neon-teal/10">
+                    <div className="font-data text-lg text-neon-teal">{macros.protein}g</div>
+                    <div className="text-[10px] text-chrome/40 font-ui">PROTEIN</div>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-neon-pink/5 border border-neon-pink/10">
+                    <div className="font-data text-lg text-neon-pink">{macros.carbs}g</div>
+                    <div className="text-[10px] text-chrome/40 font-ui">CARBS</div>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-neon-orange/5 border border-neon-orange/10">
+                    <div className="font-data text-lg text-neon-orange">{macros.fat}g</div>
+                    <div className="text-[10px] text-chrome/40 font-ui">FAT</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex justify-between text-sm font-body">
+                  <span className="text-chrome/60">Water Target</span>
+                  <span className="text-chrome font-data">{water}L / day</span>
+                </div>
+
+                {collectedData.supplements?.length ? (
+                  <div className="mt-3 pt-3 border-t border-neon-teal/10">
+                    <span className="text-[10px] text-chrome/40 font-ui uppercase tracking-wider">Active Stack</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {collectedData.supplements.map((s, i) => (
+                        <span key={i} className="px-2 py-0.5 rounded-full text-[10px] bg-electric-purple/10 text-electric-purple border border-electric-purple/20 font-body">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* CTA */}
+              <button
+                onClick={() => setPhase('commit')}
+                className="w-full mt-6 py-4 rounded-xl font-ui font-semibold text-sm uppercase tracking-wider
+                  bg-gradient-to-r from-neon-teal to-neon-pink text-white
+                  glow-teal btn-neon"
+              >
+                Lock It In <ChevronRight size={16} className="inline ml-1" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
+    );
+  }
 
-      <div className="glass rounded-2xl p-4">
-        <Row label="Water Target" value={`${water}L / day`} />
+  // ─── PHASE 3: COMMITMENT ───────────────────────────────
+  return (
+    <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden px-6">
+      <div className="absolute inset-0 grid-bg opacity-30" />
+      <div className="absolute inset-0 scanlines" />
+
+      <div className="relative z-10 text-center max-w-sm fade-up">
+        <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
+          <Zap size={28} className="text-white" />
+        </div>
+
+        <h1 className="font-display text-xl text-neon-teal glow-text uppercase tracking-wider mb-3">
+          Protocol Loaded
+        </h1>
+        <p className="font-ui text-sm text-chrome/60 mb-8">
+          Your AI nutritionist is calibrated. Every meal, every check-in, every conversation — APEX has your data and your back.
+        </p>
+
+        <button
+          onClick={finishOnboarding}
+          className="w-full py-4 rounded-xl font-display text-sm uppercase tracking-wider
+            bg-gradient-to-r from-neon-teal to-neon-pink text-white
+            glow-breathe btn-neon"
+        >
+          Let's Get Jacked
+        </button>
+
+        <p className="text-[10px] text-chrome/30 mt-4 font-body">
+          Your protocol adapts in real-time as you train and eat.
+        </p>
       </div>
-
-      <p className="text-xs text-slate-500 text-center px-4">
-        These are your starting targets. JackedAI will adjust as you track and your Garmin/Apple Health data comes in.
-      </p>
-    </div>
-  );
-}
-
-function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-slate-400">{label}</span>
-      <span className={highlight ? 'text-white font-bold' : 'text-slate-200'}>{value}</span>
-    </div>
-  );
-}
-
-function MacroCard({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="text-center p-3 rounded-xl bg-white/5">
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-      <div className="text-xs text-slate-400">{label}</div>
     </div>
   );
 }
