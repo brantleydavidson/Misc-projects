@@ -57,7 +57,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />
             <Route path="/snap" element={<SnapFood />} />
-            <Route path="/chat" element={<Chat profile={profile} />} />
+            <Route path="/chat" element={<Chat profile={profile} onUpdateProfile={updateProfile} />} />
             <Route path="/log" element={<FoodLog profile={profile} />} />
             <Route path="/checkin" element={<CheckIn />} />
             <Route path="/profile" element={

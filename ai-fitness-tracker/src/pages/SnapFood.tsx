@@ -1,20 +1,46 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, X, Image, RotateCcw, Check, Loader2 } from 'lucide-react';
-import { analyzeFood } from '../lib/api';
+import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap } from 'lucide-react';
+import { analyzeFoodChat } from '../lib/api';
+import type { FoodMessage, FoodData } from '../lib/api';
 import { addFoodEntry } from '../lib/storage';
 import type { FoodEntry } from '../types';
+
+type Mode = 'choose' | 'camera' | 'preview' | 'conversation';
 
 export function SnapFood() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [mode, setMode] = useState<'choose' | 'camera' | 'preview' | 'analyzing' | 'result'>('choose');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [mode, setMode] = useState<Mode>('choose');
   const [imageData, setImageData] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [mealType, setMealType] = useState<FoodEntry['meal_type']>('lunch');
   const [stream, setStream] = useState<MediaStream | null>(null);
+
+  // Conversation state
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [apiMessages, setApiMessages] = useState<FoodMessage[]>([]);
+  const [foodData, setFoodData] = useState<FoodData | null>(null);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Auto-detect meal type from time of day
+  useEffect(() => {
+    const h = new Date().getHours();
+    if (h < 10) setMealType('breakfast');
+    else if (h < 14) setMealType('lunch');
+    else if (h < 17) setMealType('snack');
+    else setMealType('dinner');
+  }, []);
+
+  // Auto-scroll messages
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
 
   const startCamera = useCallback(async () => {
     try {
@@ -62,34 +88,76 @@ export function SnapFood() {
     reader.readAsDataURL(file);
   };
 
+  // Start the conversation by analyzing the image
   const analyzeImage = async () => {
     if (!imageData) return;
-    setMode('analyzing');
+    setMode('conversation');
+    setLoading(true);
     setError(null);
+
+    const base64 = imageData.split(',')[1];
+    const firstMsg: FoodMessage = {
+      role: 'user',
+      content: `Analyze this ${mealType} photo and estimate macros.`,
+      image: base64,
+    };
+
     try {
-      const base64 = imageData.split(',')[1];
-      const res = await analyzeFood(base64, mealType);
-      setResult(res);
-      setMode('result');
+      const res = await analyzeFoodChat([firstMsg], mealType);
+      setApiMessages([
+        firstMsg,
+        { role: 'assistant', content: res.message + (res.food_data ? `\n\`\`\`food_data\n${JSON.stringify(res.food_data)}\n\`\`\`` : '') },
+      ]);
+      setMessages([{ role: 'assistant', content: res.message }]);
+      if (res.food_data) setFoodData(res.food_data);
     } catch (err: any) {
-      setError(err.message || 'Failed to analyze food. Please try again.');
+      setError(err.message || 'Failed to analyze food.');
       setMode('preview');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveResult = () => {
-    if (!result) return;
+  // Send a follow-up message in the conversation
+  async function handleSend(text?: string) {
+    const msg = text || input.trim();
+    if (!msg || loading) return;
+    setInput('');
+
+    const userApiMsg: FoodMessage = { role: 'user', content: msg };
+    const updatedApi = [...apiMessages, userApiMsg];
+    setApiMessages(updatedApi);
+    setMessages(prev => [...prev, { role: 'user', content: msg }]);
+    setLoading(true);
+
+    try {
+      const res = await analyzeFoodChat(updatedApi, mealType);
+      setApiMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: res.message + (res.food_data ? `\n\`\`\`food_data\n${JSON.stringify(res.food_data)}\n\`\`\`` : '') },
+      ]);
+      setMessages(prev => [...prev, { role: 'assistant', content: res.message }]);
+      if (res.food_data) setFoodData(res.food_data);
+    } catch (err: any) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `Connection issue: ${err.message}` }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const logFood = () => {
+    if (!foodData) return;
     addFoodEntry({
-      food_name: result.food_name,
-      description: result.description,
-      calories: result.calories,
-      protein: result.protein,
-      carbs: result.carbs,
-      fat: result.fat,
-      fiber: result.fiber,
+      food_name: foodData.food_name,
+      description: foodData.description,
+      calories: foodData.calories,
+      protein: foodData.protein,
+      carbs: foodData.carbs,
+      fat: foodData.fat,
+      fiber: foodData.fiber,
       meal_type: mealType,
-      ai_analysis: result.ai_analysis,
-      confidence: result.confidence,
+      ai_analysis: foodData.ai_analysis,
+      confidence: foodData.confidence,
       image_base64: imageData || undefined,
     });
     navigate('/');
@@ -98,24 +166,31 @@ export function SnapFood() {
   const reset = () => {
     stopCamera();
     setImageData(null);
-    setResult(null);
+    setFoodData(null);
     setError(null);
+    setMessages([]);
+    setApiMessages([]);
+    setInput('');
     setMode('choose');
   };
 
   return (
-    <div className="min-h-screen bg-deep-navy pb-24">
+    <div className="min-h-screen bg-deep-navy flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
         <button onClick={() => { stopCamera(); navigate('/'); }} className="text-slate-400">
           <X size={24} />
         </button>
         <h1 className="text-lg font-bold gradient-text">Snap Food</h1>
-        <div className="w-6" />
+        {mode === 'conversation' ? (
+          <button onClick={reset} className="text-slate-400"><RotateCcw size={20} /></button>
+        ) : (
+          <div className="w-6" />
+        )}
       </div>
 
       {/* Meal type selector */}
-      <div className="flex gap-2 px-4 mb-4">
+      <div className="flex gap-2 px-4 mb-4 flex-shrink-0">
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
           <button key={t} onClick={() => setMealType(t)}
             className={`flex-1 py-2 rounded-lg text-xs capitalize transition ${mealType === t
@@ -126,16 +201,16 @@ export function SnapFood() {
       </div>
 
       {error && (
-        <div className="mx-4 mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+        <div className="mx-4 mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex-shrink-0">
           {error}
         </div>
       )}
 
       {/* Choose mode */}
       {mode === 'choose' && (
-        <div className="px-4 space-y-4 mt-8">
+        <div className="px-4 space-y-4 mt-8 flex-1">
           <p className="text-center text-slate-400 text-sm mb-8">
-            Take a photo of your food and AI will instantly estimate the macros
+            Take a photo and APEX will analyze it — ask questions if needed, then log when you're happy.
           </p>
           <button onClick={startCamera}
             className="w-full py-16 rounded-2xl border-2 border-dashed border-neon-teal/40 bg-neon-teal/5 flex flex-col items-center gap-3 hover:bg-neon-teal/10 transition"
@@ -158,9 +233,8 @@ export function SnapFood() {
 
       {/* Camera view */}
       {mode === 'camera' && (
-        <div className="relative">
+        <div className="relative flex-1">
           <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
-          <div className="absolute inset-0 viewfinder" />
           <div className="absolute bottom-8 left-0 right-0 flex justify-center">
             <button onClick={capturePhoto}
               className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-white/20 backdrop-blur-sm active:scale-95 transition"
@@ -173,7 +247,7 @@ export function SnapFood() {
 
       {/* Preview */}
       {mode === 'preview' && imageData && (
-        <div className="px-4 space-y-4">
+        <div className="px-4 space-y-4 flex-1">
           <div className="relative rounded-2xl overflow-hidden">
             <img src={imageData} alt="Food" className="w-full aspect-[4/3] object-cover" />
           </div>
@@ -190,95 +264,154 @@ export function SnapFood() {
         </div>
       )}
 
-      {/* Analyzing */}
-      {mode === 'analyzing' && (
-        <div className="px-4 mt-12 text-center space-y-4">
-          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-neon-teal/20 to-neon-pink/20 flex items-center justify-center">
-            <Loader2 size={32} className="text-neon-teal animate-spin" />
-          </div>
-          <p className="text-white font-medium">Analyzing your food...</p>
-          <p className="text-slate-400 text-sm">AI is identifying items and estimating macros</p>
+      {/* Conversation mode */}
+      {mode === 'conversation' && (
+        <>
+          {/* Photo thumbnail */}
           {imageData && (
-            <img src={imageData} alt="Food" className="w-48 h-48 mx-auto rounded-xl object-cover opacity-50" />
-          )}
-        </div>
-      )}
-
-      {/* Result */}
-      {mode === 'result' && result && (
-        <div className="px-4 space-y-4">
-          {imageData && (
-            <img src={imageData} alt="Food" className="w-full h-48 rounded-2xl object-cover" />
-          )}
-          <div className="glass rounded-2xl p-4">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h2 className="text-lg font-bold text-white">{result.food_name}</h2>
-                {result.description && <p className="text-xs text-slate-400 mt-0.5">{result.description}</p>}
-              </div>
-              <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
-                {Math.round((result.confidence || 0.85) * 100)}% confident
-              </span>
+            <div className="px-4 mb-2 flex-shrink-0">
+              <img src={imageData} alt="Food" className="w-full h-32 rounded-xl object-cover opacity-80" />
             </div>
+          )}
 
-            {/* Macro summary */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
-              <MacroCard label="Calories" value={result.calories} unit="kcal" color="text-orange-400" />
-              <MacroCard label="Protein" value={result.protein} unit="g" color="text-neon-teal" />
-              <MacroCard label="Carbs" value={result.carbs} unit="g" color="text-neon-pink" />
-              <MacroCard label="Fat" value={result.fat} unit="g" color="text-neon-pink" />
-            </div>
-
-            {/* Individual items */}
-            {result.items && result.items.length > 1 && (
-              <div className="border-t border-white/10 pt-3">
-                <h3 className="text-xs font-semibold text-slate-300 mb-2">Breakdown</h3>
-                {result.items.map((item: any, i: number) => (
-                  <div key={i} className="flex justify-between items-center py-1.5 text-xs">
-                    <span className="text-slate-300">{item.name}</span>
-                    <span className="text-slate-500">{item.calories} cal | {item.protein}p {item.carbs}c {item.fat}f</span>
+          {/* Food data card (if available) */}
+          {foodData && (
+            <div className="px-4 mb-2 flex-shrink-0">
+              <div className="glass rounded-xl p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-semibold text-white">{foodData.food_name}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                    foodData.needs_clarification
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-green-500/20 text-green-400'
+                  }`}>
+                    {foodData.needs_clarification ? 'Needs clarification' : `${Math.round(foodData.confidence * 100)}% confident`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <div className="text-sm font-bold text-orange-400 font-data">{Math.round(foodData.calories)}</div>
+                    <div className="text-[9px] text-slate-500">kcal</div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div>
+                    <div className="text-sm font-bold text-neon-teal font-data">{Math.round(foodData.protein)}g</div>
+                    <div className="text-[9px] text-slate-500">protein</div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-neon-pink font-data">{Math.round(foodData.carbs)}g</div>
+                    <div className="text-[9px] text-slate-500">carbs</div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-neon-pink font-data">{Math.round(foodData.fat)}g</div>
+                    <div className="text-[9px] text-slate-500">fat</div>
+                  </div>
+                </div>
 
-            {result.ai_analysis && (
-              <div className="border-t border-white/10 pt-3 mt-3">
-                <p className="text-xs text-slate-400 leading-relaxed">{result.ai_analysis}</p>
+                {/* Item breakdown */}
+                {foodData.items && foodData.items.length > 1 && (
+                  <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
+                    {foodData.items.map((item, i) => (
+                      <div key={i} className="flex justify-between text-[10px]">
+                        <span className="text-slate-400">{item.name}</span>
+                        <span className="text-slate-500">{item.calories}cal | {item.protein}p {item.carbs}c {item.fat}f</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Chat messages */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-2 no-scrollbar space-y-2">
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-neon-teal/15 text-chrome border border-neon-teal/20 rounded-br-md'
+                    : 'glass text-slate-200 rounded-bl-md'
+                }`}>
+                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                </div>
+              </div>
+            ))}
+
+            {loading && (
+              <div className="flex justify-start">
+                <div className="glass rounded-2xl rounded-bl-md px-3 py-2">
+                  <Loader2 size={14} className="text-neon-teal animate-spin" />
+                </div>
               </div>
             )}
           </div>
 
-          <div className="flex gap-3">
-            <button onClick={reset} className="flex-1 py-3 rounded-xl glass text-slate-300">
-              <RotateCcw size={16} className="inline mr-1" /> Redo
-            </button>
-            <button onClick={saveResult}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold flex items-center justify-center gap-2"
-            >
-              <Check size={16} /> Log It
-            </button>
+          {/* Quick actions + input */}
+          <div className="flex-shrink-0 px-4 pb-24 pt-2 space-y-2">
+            {/* Quick clarification buttons */}
+            {foodData && !loading && (
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                {foodData.needs_clarification ? (
+                  <>
+                    <QuickChip label="Looks right" onTap={() => handleSend("That looks right, log it")} />
+                    <QuickChip label="Bigger portion" onTap={() => handleSend("The portions were bigger than that")} />
+                    <QuickChip label="Smaller portion" onTap={() => handleSend("Actually the portions were smaller")} />
+                  </>
+                ) : (
+                  <>
+                    <QuickChip label="Portion was bigger" onTap={() => handleSend("The portions were bigger than that")} />
+                    <QuickChip label="Portion was smaller" onTap={() => handleSend("Portions were smaller")} />
+                    <QuickChip label="I had more items" onTap={() => handleSend("There were more items I ate that you didn't catch")} />
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 flex gap-2 items-end glass rounded-2xl p-2">
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); } }}
+                  placeholder="Correct or add details..."
+                  className="flex-1 bg-transparent text-white text-sm placeholder-slate-500 focus:outline-none px-2 py-1.5"
+                />
+                <button
+                  onClick={() => handleSend()}
+                  disabled={loading || !input.trim()}
+                  className="w-8 h-8 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink flex items-center justify-center disabled:opacity-20 transition flex-shrink-0"
+                >
+                  <Send size={14} className="text-white" />
+                </button>
+              </div>
+
+              {/* Log button */}
+              {foodData && !foodData.needs_clarification && (
+                <button
+                  onClick={logFood}
+                  className="h-12 px-4 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold text-sm flex items-center gap-1.5 flex-shrink-0"
+                >
+                  <Check size={16} /> Log
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
 }
 
-function MacroCard({ label, value, unit, color }: { label: string; value: number; unit: string; color: string }) {
+function QuickChip({ label, onTap }: { label: string; onTap: () => void }) {
   return (
-    <div className="text-center p-2 rounded-xl bg-white/5">
-      <div className={`text-lg font-bold ${color}`}>{Math.round(value)}</div>
-      <div className="text-[10px] text-slate-500">{unit}</div>
-      <div className="text-[10px] text-slate-400">{label}</div>
-    </div>
-  );
-}
-
-function Zap(props: any) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
-      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>
-    </svg>
+    <button
+      onClick={onTap}
+      className="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium
+        bg-white/[0.03] border border-white/[0.08] text-chrome/50
+        hover:bg-neon-teal/5 hover:border-neon-teal/20 hover:text-chrome/70
+        transition active:scale-95"
+    >
+      {label}
+    </button>
   );
 }

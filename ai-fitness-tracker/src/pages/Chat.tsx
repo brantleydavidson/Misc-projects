@@ -1,25 +1,43 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Trash2, Sparkles } from 'lucide-react';
+import { Send, Loader2, Trash2, Sparkles, Settings2 } from 'lucide-react';
 import type { UserProfile, ChatMessage } from '../types';
 import { getChatMessages, addChatMessage, clearChat, getDailySummary, getGarminData } from '../lib/storage';
 import { sendChat } from '../lib/api';
 
 interface ChatProps {
   profile: UserProfile;
+  onUpdateProfile?: (data: Partial<UserProfile>) => void;
 }
 
 const QUICK_PROMPTS = [
   "What should I eat for dinner to hit my macros?",
   "Am I on track today?",
   "Give me a high-protein snack idea",
-  "How's my progress looking?",
+  "My macro targets seem off — can we adjust?",
   "What should I eat before my workout?",
 ];
 
-export function Chat({ profile }: ChatProps) {
+// Extract profile_update JSON from AI response
+function extractProfileUpdate(text: string): Partial<UserProfile> | null {
+  const match = text.match(/```profile_update\s*\n?([\s\S]*?)\n?```/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
+// Strip the profile_update block from display text
+function cleanDisplayText(text: string): string {
+  return text.replace(/```profile_update\s*\n?[\s\S]*?\n?```/g, '').trim();
+}
+
+export function Chat({ profile, onUpdateProfile }: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(getChatMessages());
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [appliedUpdates, setAppliedUpdates] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -57,9 +75,16 @@ export function Chat({ profile }: ChatProps) {
     }
   }
 
+  function applyUpdate(msgIndex: number, update: Partial<UserProfile>) {
+    if (!onUpdateProfile) return;
+    onUpdateProfile(update);
+    setAppliedUpdates(prev => new Set(prev).add(msgIndex));
+  }
+
   function handleClear() {
     clearChat();
     setMessages([]);
+    setAppliedUpdates(new Set());
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -95,9 +120,9 @@ export function Chat({ profile }: ChatProps) {
               <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gradient-to-br from-neon-pink/20 to-neon-teal/20 flex items-center justify-center">
                 <Sparkles size={28} className="text-neon-pink" />
               </div>
-              <h2 className="text-white font-semibold mb-1">Hey! I'm your AI Coach</h2>
+              <h2 className="text-white font-semibold mb-1">Hey! I'm APEX</h2>
               <p className="text-sm text-slate-400 max-w-xs mx-auto">
-                I know your stats, your goals, and what you've eaten today. Ask me anything about nutrition, meals, or your progress.
+                I know your stats, your goals, and what you've eaten today. Ask me anything — or tell me to adjust your targets.
               </p>
             </div>
             <div className="space-y-2">
@@ -112,17 +137,83 @@ export function Chat({ profile }: ChatProps) {
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-              msg.role === 'user'
-                ? 'bg-gradient-to-r from-neon-teal to-neon-pink text-white rounded-br-md'
-                : 'glass text-slate-200 rounded-bl-md'
-            }`}>
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+        {messages.map((msg, i) => {
+          const profileUpdate = msg.role === 'assistant' ? extractProfileUpdate(msg.content) : null;
+          const displayText = msg.role === 'assistant' ? cleanDisplayText(msg.content) : msg.content;
+          const isApplied = appliedUpdates.has(i);
+
+          return (
+            <div key={i}>
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-gradient-to-r from-neon-teal to-neon-pink text-white rounded-br-md'
+                    : 'glass text-slate-200 rounded-bl-md'
+                }`}>
+                  <div className="whitespace-pre-wrap">{displayText}</div>
+                </div>
+              </div>
+
+              {/* Profile update action card */}
+              {profileUpdate && onUpdateProfile && (
+                <div className="flex justify-start mt-2">
+                  <div className={`max-w-[85%] rounded-xl px-4 py-3 border ${
+                    isApplied
+                      ? 'bg-green-500/5 border-green-500/20'
+                      : 'bg-neon-teal/5 border-neon-teal/20'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Settings2 size={14} className={isApplied ? 'text-green-400' : 'text-neon-teal'} />
+                      <span className="text-xs font-semibold text-chrome/70">
+                        {isApplied ? 'Targets Updated' : 'Suggested Target Changes'}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      {profileUpdate.calorie_target != null && (
+                        <div className="flex justify-between text-chrome/60">
+                          <span>Calories</span>
+                          <span className="font-data text-chrome">{profileUpdate.calorie_target} cal</span>
+                        </div>
+                      )}
+                      {profileUpdate.protein_target != null && (
+                        <div className="flex justify-between text-chrome/60">
+                          <span>Protein</span>
+                          <span className="font-data text-chrome">{profileUpdate.protein_target}g</span>
+                        </div>
+                      )}
+                      {profileUpdate.carb_target != null && (
+                        <div className="flex justify-between text-chrome/60">
+                          <span>Carbs</span>
+                          <span className="font-data text-chrome">{profileUpdate.carb_target}g</span>
+                        </div>
+                      )}
+                      {profileUpdate.fat_target != null && (
+                        <div className="flex justify-between text-chrome/60">
+                          <span>Fat</span>
+                          <span className="font-data text-chrome">{profileUpdate.fat_target}g</span>
+                        </div>
+                      )}
+                      {profileUpdate.water_target_liters != null && (
+                        <div className="flex justify-between text-chrome/60">
+                          <span>Water</span>
+                          <span className="font-data text-chrome">{profileUpdate.water_target_liters}L</span>
+                        </div>
+                      )}
+                    </div>
+                    {!isApplied && (
+                      <button
+                        onClick={() => applyUpdate(i, profileUpdate)}
+                        className="mt-3 w-full py-2 rounded-lg bg-neon-teal/10 text-neon-teal text-xs font-semibold border border-neon-teal/30 hover:bg-neon-teal/20 transition"
+                      >
+                        Apply Changes
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {loading && (
           <div className="flex justify-start">

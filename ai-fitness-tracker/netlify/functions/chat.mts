@@ -5,7 +5,9 @@ export default async (req: Request, _context: Context) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const apiKey = typeof Deno !== "undefined"
+    ? Deno.env.get("ANTHROPIC_API_KEY")
+    : process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "API key not configured" }), {
       status: 500,
@@ -81,6 +83,20 @@ RULES:
 - If they use supplements or peptides, factor those into advice (timing, dosing, synergies)
 - Reference their specific goals and data — never give generic wellness speak
 - End responses with a clear next action when appropriate
+
+MACRO TARGET UPDATES:
+When the user asks you to change their macro targets, calorie target, or any profile setting (e.g., "set my protein to 220g", "bump my calories to 2800", "my targets are too low", "I want more protein"), you MUST include a JSON block in your response wrapped in triple backticks with the label "profile_update". Only include the fields that should change.
+
+Example — user says "set my protein to 220 and calories to 2600":
+\`\`\`profile_update
+{"calorie_target":2600,"protein_target":220}
+\`\`\`
+
+If the user says their targets are "too low" or "too high" without specifying exact numbers, suggest specific numbers based on their profile and sports science, explain your reasoning, then include the profile_update block with your recommended values.
+
+Available fields you can update: calorie_target, protein_target, carb_target, fat_target, water_target_liters, weight_loss_pace, goal_weight_kg.
+
+When you update one macro, recalculate the others to keep them balanced. For example, if increasing protein, you may need to reduce carbs to stay within the calorie target. Always explain what you changed and why.
 
 You never:
 - Use filler praise ("Great job!", "Awesome!")

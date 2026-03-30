@@ -15,7 +15,7 @@ async function post<T>(endpoint: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-export interface AnalyzeFoodResponse {
+export interface FoodData {
   food_name: string;
   description: string;
   calories: number;
@@ -25,15 +25,36 @@ export interface AnalyzeFoodResponse {
   fiber: number;
   confidence: number;
   ai_analysis: string;
+  needs_clarification?: boolean;
   items?: { name: string; calories: number; protein: number; carbs: number; fat: number }[];
 }
 
+export interface AnalyzeFoodResponse {
+  message: string;
+  food_data: FoodData | null;
+}
+
+// Legacy single-shot (still works)
 export async function analyzeFood(imageBase64: string, mealType: string, notes?: string): Promise<AnalyzeFoodResponse> {
   return post<AnalyzeFoodResponse>('analyze-food', {
     image: imageBase64,
     meal_type: mealType,
     notes,
   });
+}
+
+// Conversational food analysis
+export interface FoodMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  image?: string; // base64 for the first message
+}
+
+export async function analyzeFoodChat(
+  messages: FoodMessage[],
+  mealType: string
+): Promise<AnalyzeFoodResponse> {
+  return post<AnalyzeFoodResponse>('analyze-food', { messages, meal_type: mealType });
 }
 
 export interface ChatResponse {
