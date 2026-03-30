@@ -47,12 +47,25 @@ export interface UserProfile {
   fat_target?: number;
   water_target_liters?: number;
   onboarding_complete?: boolean;
+  // User preferences / settings
+  unit_weight?: 'lbs' | 'kg';          // display weight in lbs or kg (default: lbs for US)
+  unit_height?: 'in' | 'cm';           // display height in inches or cm (default: in for US)
+  unit_distance?: 'mi' | 'km';         // display distance in miles or km (default: mi for US)
+  unit_water?: 'oz' | 'ml';            // display water in oz or ml (default: oz for US)
+  unit_temperature?: 'F' | 'C';        // display temp in F or C (default: F for US)
+  date_format?: 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
+  time_format?: '12h' | '24h';
+  meal_window_start?: string;           // e.g. "08:00" — for intermittent fasting / meal timing
+  meal_window_end?: string;             // e.g. "20:00"
+  weekly_weigh_in_day?: number;         // 0=Sun..6=Sat (default: 1=Mon)
+  display_theme?: 'dark' | 'light';    // future: light mode (default: dark)
   // Notification preferences
   notifications_enabled?: boolean;
   notify_morning?: string;   // "07:00"
   notify_midday?: string;    // "13:00"
   notify_evening?: string;   // "21:00"
   notify_weigh_in?: string;  // "07:00"
+  email?: string;
   created_at?: string;
 }
 

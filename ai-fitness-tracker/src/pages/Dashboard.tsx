@@ -9,6 +9,7 @@ import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
 import type { UserProfile, GarminData } from '../types';
 import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus } from '../lib/storage';
+import { displayWater, displayWaterTarget, waterIncrements, displayWeight } from '../lib/units';
 import {
   getCurrentCheckInPeriod, getCheckInNudge,
   requestNotificationPermission, getNotificationPermission, scheduleAllReminders,
@@ -186,18 +187,18 @@ export function Dashboard({ profile }: DashboardProps) {
             <Droplets size={16} className="text-blue-400" />
             <h2 className="text-sm font-semibold text-white">Hydration</h2>
           </div>
-          <span className="text-xs text-slate-400">{(water / 1000).toFixed(1)}L / {(targets.water / 1000).toFixed(1)}L</span>
+          <span className="text-xs text-slate-400">{displayWater(water, profile)} / {displayWaterTarget(targets.water / 1000, profile)}</span>
         </div>
         <div className="h-3 bg-white/10 rounded-full overflow-hidden mb-3">
           <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-neon-teal transition-all duration-500"
             style={{ width: `${Math.min((water / targets.water) * 100, 100)}%` }} />
         </div>
         <div className="flex gap-2">
-          {[250, 500, 750].map(ml => (
+          {waterIncrements(profile).map(({ ml, label }) => (
             <button key={ml} onClick={() => { addWater(ml); setWater(getWaterIntake()); }}
               className="flex-1 py-2 rounded-lg bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20 hover:bg-blue-500/20 transition"
             >
-              +{ml}ml
+              {label}
             </button>
           ))}
         </div>
@@ -247,7 +248,7 @@ export function Dashboard({ profile }: DashboardProps) {
               <StatCard icon={<Droplets size={14} />} label="SpO2" value={`${activity.spo2}%`} color="text-blue-400" />
             )}
             {activity.weight_kg != null && (
-              <StatCard icon={<Activity size={14} />} label="Weight" value={`${activity.weight_kg}kg`} color="text-white" />
+              <StatCard icon={<Activity size={14} />} label="Weight" value={displayWeight(activity.weight_kg, profile)} color="text-white" />
             )}
           </div>
         )}

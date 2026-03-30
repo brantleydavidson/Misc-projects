@@ -231,3 +231,70 @@ export function getDailySummary(date?: string): {
     water_ml,
   };
 }
+
+// ── Historical data (for Trends page) ─────────────────────────────
+export interface DaySnapshot {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  water_ml: number;
+  steps?: number;
+  calories_active?: number;
+  sleep_hours?: number;
+  heart_rate_resting?: number;
+  body_battery_morning?: number;
+  stress_level?: number;
+  hrv_status?: number;
+  weight_kg?: number;
+  workouts: number;
+}
+
+/** Get historical snapshots for a date range (last N days). */
+export function getHistoricalData(days: number = 14): DaySnapshot[] {
+  const foodLog = getJSON<Record<string, FoodEntry[]>>(KEYS.FOOD_LOG, {});
+  const waterLog = getJSON<Record<string, number>>(KEYS.WATER_LOG, {});
+  const activityLog = getJSON<Record<string, GarminData>>(KEYS.ACTIVITY_LOG, {});
+
+  const snapshots: DaySnapshot[] = [];
+  const today = new Date();
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split('T')[0];
+
+    const entries = foodLog[key] || [];
+    const water = waterLog[key] || 0;
+    const activity = activityLog[key] || {};
+
+    snapshots.push({
+      date: key,
+      calories: entries.reduce((s, e) => s + e.calories, 0),
+      protein: entries.reduce((s, e) => s + e.protein, 0),
+      carbs: entries.reduce((s, e) => s + e.carbs, 0),
+      fat: entries.reduce((s, e) => s + e.fat, 0),
+      water_ml: water,
+      steps: activity.steps,
+      calories_active: activity.calories_active || activity.calories_burned,
+      sleep_hours: activity.sleep_hours,
+      heart_rate_resting: activity.heart_rate_resting,
+      body_battery_morning: activity.body_battery_morning || activity.body_battery,
+      stress_level: activity.stress_level,
+      hrv_status: activity.hrv_status,
+      weight_kg: activity.weight_kg,
+      workouts: (activity.workouts || []).length,
+    });
+  }
+
+  return snapshots;
+}
+
+/** Get all dates that have any data (for streak calculation etc.) */
+export function getActiveDates(): string[] {
+  const foodLog = getJSON<Record<string, FoodEntry[]>>(KEYS.FOOD_LOG, {});
+  const activityLog = getJSON<Record<string, GarminData>>(KEYS.ACTIVITY_LOG, {});
+  const dates = new Set([...Object.keys(foodLog), ...Object.keys(activityLog)]);
+  return [...dates].sort();
+}

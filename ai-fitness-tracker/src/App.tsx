@@ -7,6 +7,7 @@ import { Chat } from './pages/Chat';
 import { FoodLog } from './pages/FoodLog';
 import { Profile } from './pages/Profile';
 import { CheckIn } from './pages/CheckIn';
+import { Trends } from './pages/Trends';
 import { Onboarding } from './pages/Onboarding';
 import { Login } from './pages/Login';
 import { useProfile } from './hooks/useProfile';
@@ -115,6 +116,7 @@ export default function App() {
         <main className="flex-1 overflow-y-auto no-scrollbar">
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />
+            <Route path="/trends" element={<Trends profile={profile} />} />
             <Route path="/snap" element={<SnapFood />} />
             <Route path="/chat" element={<Chat profile={profile} onUpdateProfile={updateProfile} />} />
             <Route path="/log" element={<FoodLog profile={profile} />} />
