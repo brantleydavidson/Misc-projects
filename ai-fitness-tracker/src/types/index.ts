@@ -66,6 +66,8 @@ export interface UserProfile {
   notify_evening?: string;   // "21:00"
   notify_weigh_in?: string;  // "07:00"
   email?: string;
+  phone?: string;
+  sms_opted_in?: boolean;
   created_at?: string;
 }
 

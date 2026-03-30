@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS ja_profiles (
   fat_target integer,
   water_target_liters numeric,
   email text,
+  phone text,
+  sms_opted_in boolean DEFAULT false,
   body_fat_pct numeric,
   supplements text[],
   peptides text[],

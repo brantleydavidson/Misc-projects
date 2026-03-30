@@ -8,6 +8,9 @@
 [functions."weekly-report"]
   schedule = "0 8 * * 1"
 
+[functions."sms-reminders"]
+  schedule = "0 7,20 * * *"
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"

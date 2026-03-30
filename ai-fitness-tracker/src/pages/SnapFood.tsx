@@ -1,13 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap, PenLine } from 'lucide-react';
-import { analyzeFoodChat, lookupNutrition } from '../lib/api';
-import type { FoodMessage, FoodData, NutritionResult } from '../lib/api';
+import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap, PenLine, ScanBarcode } from 'lucide-react';
+import { analyzeFoodChat, lookupNutrition, lookupBarcode } from '../lib/api';
+import type { FoodMessage, FoodData, NutritionResult, BarcodeResult } from '../lib/api';
 import { addFoodEntry } from '../lib/storage';
 import { getFoodMemoryContext, addCorrection, learnFood, bumpFoodFrequency } from '../lib/food-memory';
 import type { FoodEntry } from '../types';
 
-type Mode = 'choose' | 'camera' | 'preview' | 'conversation' | 'manual';
+type Mode = 'choose' | 'camera' | 'preview' | 'conversation' | 'manual' | 'barcode';
 
 /** Safely parse a number — returns 0 for NaN/undefined/null */
 function safeNum(val: unknown): number {
@@ -73,6 +73,12 @@ export function SnapFood() {
     fiber: '',
   });
 
+  // Barcode scanning state
+  const barcodeScannerRef = useRef<HTMLDivElement>(null);
+  const html5QrCodeRef = useRef<any>(null);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [barcodeResult, setBarcodeResult] = useState<BarcodeResult | null>(null);
+
   // Auto-detect meal type from time of day
   useEffect(() => {
     const h = new Date().getHours();
@@ -131,6 +137,78 @@ export function SnapFood() {
       setMode('preview');
     };
     reader.readAsDataURL(file);
+  };
+
+  // Barcode scanning
+  const startBarcodeScanner = useCallback(async () => {
+    setMode('barcode');
+    setBarcodeResult(null);
+    setError(null);
+    // Small delay to let the DOM render the scanner container
+    setTimeout(async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        const scanner = new Html5Qrcode('barcode-scanner');
+        html5QrCodeRef.current = scanner;
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 280, height: 150 }, aspectRatio: 1.0 },
+          async (decodedText: string) => {
+            // Got a barcode — stop scanning and look it up
+            await scanner.stop().catch(() => {});
+            html5QrCodeRef.current = null;
+            handleBarcodeScanned(decodedText);
+          },
+          () => {} // ignore scan failures (no match yet)
+        );
+      } catch (err: any) {
+        setError('Camera access needed for barcode scanning.');
+        setMode('choose');
+      }
+    }, 200);
+  }, []);
+
+  const stopBarcodeScanner = useCallback(async () => {
+    if (html5QrCodeRef.current) {
+      try { await html5QrCodeRef.current.stop(); } catch {}
+      html5QrCodeRef.current = null;
+    }
+  }, []);
+
+  const handleBarcodeScanned = async (barcode: string) => {
+    setBarcodeLoading(true);
+    try {
+      const result = await lookupBarcode(barcode);
+      setBarcodeResult(result);
+      if (result.found && result.nutrition) {
+        // Auto-populate food data from barcode lookup
+        const fd: FoodData = {
+          food_name: `${result.brand ? result.brand + ' ' : ''}${result.product_name || 'Product'}`,
+          description: `Barcode: ${barcode}`,
+          calories: result.nutrition.calories,
+          protein: result.nutrition.protein,
+          carbs: result.nutrition.carbs,
+          fat: result.nutrition.fat,
+          fiber: result.nutrition.fiber,
+          confidence: 0.95,
+          ai_analysis: `Scanned barcode ${barcode}. Source: ${result.source || 'database'}.`,
+          needs_clarification: false,
+        };
+        setFoodData(fd);
+        setInitialFoodData(fd);
+        // Switch to conversation mode to show the result card
+        setMessages([{
+          role: 'assistant',
+          content: `Found it! **${fd.food_name}** — ${result.nutrition.serving_size}.\n\n${fd.calories} cal | ${fd.protein}g protein | ${fd.carbs}g carbs | ${fd.fat}g fat\n\nLooks good? Tap **Log** to save, or adjust the numbers if needed.`,
+        }]);
+        setMode('conversation');
+      }
+    } catch (err: any) {
+      setError(`Barcode lookup failed: ${err.message}`);
+      setBarcodeResult({ found: false, message: err.message });
+    } finally {
+      setBarcodeLoading(false);
+    }
   };
 
   // Start the conversation by analyzing the image
@@ -300,6 +378,7 @@ export function SnapFood() {
 
   const reset = () => {
     stopCamera();
+    stopBarcodeScanner();
     setImageData(null);
     setFoodData(null);
     setInitialFoodData(null);
@@ -309,6 +388,7 @@ export function SnapFood() {
     setApiMessages([]);
     setInput('');
     setEditingMacro(null);
+    setBarcodeResult(null);
     setMode('choose');
   };
 
@@ -318,13 +398,13 @@ export function SnapFood() {
     <div className="min-h-screen bg-deep-navy flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
-        <button onClick={() => { stopCamera(); navigate('/'); }} className="text-slate-400">
+        <button onClick={() => { stopCamera(); stopBarcodeScanner(); navigate('/'); }} className="text-slate-400">
           <X size={24} />
         </button>
         <h1 className="text-lg font-bold gradient-text">
-          {mode === 'manual' ? 'Manual Entry' : 'Snap Food'}
+          {mode === 'manual' ? 'Manual Entry' : mode === 'barcode' ? 'Scan Barcode' : 'Snap Food'}
         </h1>
-        {(mode === 'conversation' || mode === 'manual') ? (
+        {(mode === 'conversation' || mode === 'manual' || mode === 'barcode') ? (
           <button onClick={reset} className="text-slate-400"><RotateCcw size={20} /></button>
         ) : (
           <div className="w-6" />
@@ -364,12 +444,18 @@ export function SnapFood() {
             <span className="text-slate-500 text-xs">AI identifies food + estimates macros</span>
           </button>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <button onClick={() => fileInputRef.current?.click()}
               className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
             >
               <Image size={20} className="text-neon-pink" />
               <span className="text-slate-300 text-sm">Gallery</span>
+            </button>
+            <button onClick={startBarcodeScanner}
+              className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+            >
+              <ScanBarcode size={20} className="text-yellow-400" />
+              <span className="text-slate-300 text-sm">Barcode</span>
             </button>
             <button onClick={() => setMode('manual')}
               className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
@@ -465,6 +551,50 @@ export function SnapFood() {
               <Check size={16} /> Log It
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Barcode scanning mode */}
+      {mode === 'barcode' && (
+        <div className="px-4 space-y-4 flex-1">
+          <div className="relative rounded-2xl overflow-hidden bg-black" style={{ minHeight: 300 }}>
+            <div id="barcode-scanner" ref={barcodeScannerRef} className="w-full" />
+            {barcodeLoading && (
+              <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
+                <Loader2 size={32} className="text-neon-teal animate-spin" />
+                <span className="text-slate-300 text-sm">Looking up product...</span>
+              </div>
+            )}
+          </div>
+
+          {barcodeResult && !barcodeResult.found && (
+            <div className="glass rounded-xl p-4 text-center space-y-3">
+              <p className="text-slate-300 text-sm">Product not found in database.</p>
+              <div className="flex gap-3">
+                <button onClick={startBarcodeScanner}
+                  className="flex-1 py-3 rounded-xl glass text-slate-300 flex items-center justify-center gap-2"
+                >
+                  <RotateCcw size={16} /> Try Again
+                </button>
+                <button onClick={() => setMode('manual')}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink text-white font-semibold flex items-center justify-center gap-2"
+                >
+                  <PenLine size={16} /> Enter Manually
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!barcodeResult && !barcodeLoading && (
+            <div className="text-center space-y-3">
+              <p className="text-slate-400 text-sm">Point your camera at a barcode on a food package</p>
+              <button onClick={() => { stopBarcodeScanner(); setMode('choose'); }}
+                className="py-3 px-6 rounded-xl glass text-slate-300 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       )}
 

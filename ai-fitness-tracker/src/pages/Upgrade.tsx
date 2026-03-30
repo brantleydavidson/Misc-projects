@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Crown, Check, Zap, Sparkles, ArrowLeft, Tag, Loader2 } from 'lucide-react';
-import { checkUsage, validateDiscount, type Tier, type UsageCheckResult } from '../lib/api';
+import { Crown, Check, Zap, Sparkles, ArrowLeft, Tag, Loader2, ExternalLink } from 'lucide-react';
+import { checkUsage, validateDiscount, createCheckout, type Tier, type UsageCheckResult } from '../lib/api';
 
 interface UpgradeProps {
   onBack: () => void;
@@ -62,6 +62,36 @@ export function Upgrade({ onBack }: UpgradeProps) {
       })
       .catch(() => {});
   }, []);
+
+  const [checkoutLoading, setCheckoutLoading] = useState<Tier | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  // Check URL params for success/canceled from Stripe redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success') === 'true') {
+      setCurrentTier((params.get('plan') as Tier) || 'pro');
+      // Clean up URL
+      window.history.replaceState({}, '', '/upgrade');
+    }
+  }, []);
+
+  async function handleCheckout(plan: 'pro' | 'unlimited') {
+    setCheckoutLoading(plan);
+    setCheckoutError(null);
+    try {
+      const result = await createCheckout(plan, discountCode || undefined);
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        setCheckoutError('Could not create checkout session. Stripe may not be configured yet.');
+      }
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Checkout failed');
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
 
   async function handleDiscount() {
     if (!discountCode.trim()) return;
@@ -153,8 +183,16 @@ export function Upgrade({ onBack }: UpgradeProps) {
             {isCurrent ? (
               <div className="text-center py-2 text-xs text-neon-teal font-medium">Current Plan</div>
             ) : isUpgrade ? (
-              <button className="w-full py-2.5 rounded-xl text-sm font-semibold transition bg-gradient-to-r from-neon-teal to-neon-pink text-white opacity-80 hover:opacity-100">
-                Coming Soon
+              <button
+                onClick={() => handleCheckout(tier as 'pro' | 'unlimited')}
+                disabled={checkoutLoading !== null}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold transition bg-gradient-to-r from-neon-teal to-neon-pink text-white hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {checkoutLoading === tier ? (
+                  <><Loader2 size={14} className="animate-spin" /> Processing...</>
+                ) : (
+                  <><ExternalLink size={14} /> Subscribe to {plan.name}</>
+                )}
               </button>
             ) : null}
           </div>
@@ -188,9 +226,15 @@ export function Upgrade({ onBack }: UpgradeProps) {
         )}
       </div>
 
-      {/* Future payment note */}
+      {/* Checkout error */}
+      {checkoutError && (
+        <div className="mx-0 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center">
+          {checkoutError}
+        </div>
+      )}
+
       <p className="text-[10px] text-slate-500 text-center px-4">
-        Payment integration coming soon. Use a discount code to unlock Pro features today.
+        Secure payment via Stripe. Cancel anytime. Use a discount code for free Pro access.
       </p>
     </div>
   );

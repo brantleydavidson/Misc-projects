@@ -181,6 +181,31 @@ export async function validateDiscount(code: string): Promise<DiscountResult> {
   return post<DiscountResult>('validate-discount', { code, device_id: deviceId });
 }
 
+// ── Stripe Checkout ────────────────────────────────────────────────
+
+export interface CheckoutResult {
+  url: string;
+  session_id: string;
+}
+
+export async function createCheckout(plan: 'pro' | 'unlimited', discountCode?: string): Promise<CheckoutResult> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<CheckoutResult>('create-checkout', { plan, device_id: deviceId, discount_code: discountCode });
+}
+
+// ── SMS ────────────────────────────────────────────────────────────
+
+export type SmsTemplate = 'weigh_in_reminder' | 'missed_checkin' | 'streak_milestone' | 'custom';
+
+export async function sendSms(
+  to: string,
+  template: SmsTemplate,
+  data?: Record<string, string>
+): Promise<{ sent: boolean }> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<{ sent: boolean }>('send-sms', { to, template, data, device_id: deviceId });
+}
+
 // ── Email ───────────────────────────────────────────────────────────
 
 export async function sendEmail(

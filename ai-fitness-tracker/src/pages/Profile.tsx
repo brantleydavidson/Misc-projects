@@ -472,6 +472,39 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
                 />
               </div>
             </div>
+
+            {/* SMS Notifications */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">SMS Reminders</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 block">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={profile.phone || ''}
+                    onChange={e => onUpdate({ phone: e.target.value })}
+                    placeholder="+1 (555) 123-4567"
+                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm text-slate-300">Enable SMS Reminders</span>
+                    <p className="text-[10px] text-slate-500">Weigh-in reminders & missed check-in nudges</p>
+                  </div>
+                  <button
+                    onClick={() => onUpdate({ sms_opted_in: !profile.sms_opted_in })}
+                    className={`w-11 h-6 rounded-full transition-colors relative ${
+                      profile.sms_opted_in ? 'bg-neon-teal' : 'bg-white/10'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${
+                      profile.sms_opted_in ? 'left-5.5' : 'left-0.5'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
