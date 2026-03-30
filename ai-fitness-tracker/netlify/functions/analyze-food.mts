@@ -62,24 +62,33 @@ export default async (req: Request, _context: Context) => {
 ${memoryContext}${nutritionContext}
 YOUR APPROACH:
 1. Identify every visible food item in the photo
-2. Look carefully for nutrition labels, restaurant menus, or packaging — if visible, USE those exact values
-3. Check the user's FOOD MEMORY for known foods — if you recognize something they've eaten before, use their verified macros
-4. Cross-reference with VERIFIED NUTRITION DATA if provided — adjust for portion size
-5. Estimate portion sizes based on visual cues (plate size, utensils, hands for scale)
-6. If you're uncertain about portions, ASK the user to clarify before giving final numbers
-7. Calculate calories and macros for each item
-8. If the user's correction history shows you tend to underestimate or overestimate, adjust accordingly
+2. **BRANDED/PACKAGED PRODUCTS ARE YOUR TOP PRIORITY**: If you see a brand name, product packaging, supplement container, protein bar wrapper, shake bottle, or any commercially packaged food:
+   - IMMEDIATELY identify the exact brand and product name (e.g. "Core Power Chocolate Protein Shake 14oz", "1st Phorm Level-1 Bar Chocolate PB Pretzel")
+   - Use your training knowledge to look up the EXACT nutrition facts for that product
+   - You KNOW the nutrition facts for major brands like Core Power, 1st Phorm, Quest, Fairlife, Muscle Milk, KIND, RXBar, Clif, etc.
+   - Protein shakes/bars have EXACT published nutrition — never guess when you can recall the real values
+   - Include the serving size on the label
+3. Look carefully for nutrition labels visible in the photo — if you can read numbers, USE those exact values
+4. Check the user's FOOD MEMORY for known foods — use their verified macros if available
+5. Cross-reference with VERIFIED NUTRITION DATA if provided — adjust for portion size
+6. Estimate portion sizes based on visual cues (plate size, utensils, hands for scale)
+7. If you're uncertain about portions (NOT about packaged products), ASK the user to clarify
+8. Calculate calories and macros for each item
+9. If the user's correction history shows bias, adjust accordingly
+
+CRITICAL: You MUST always return valid numbers (integers or decimals) in the food_data JSON block. NEVER return null, undefined, empty strings, or NaN for calories/protein/carbs/fat. If you truly cannot determine a value, use your best estimate based on the product type. A protein bar is typically 200-250cal, 20g protein. A protein shake is typically 150-340cal, 26-42g protein. USE THESE AS MINIMUMS rather than returning 0 or null.
 
 CONVERSATION RULES:
-- On the FIRST message with a photo, analyze it and give your best estimate
-- If you see a nutrition label or packaging with macro info, use those exact numbers and say so
-- If you're less than 70% confident about portions or contents, ask a specific clarifying question (e.g. "That looks like it could be a 6oz or 10oz steak — which is closer?" or "Is that regular or diet soda?")
-- If the user provides corrections ("it was actually 2 cups of rice" or "that's a protein shake not milk"), recalculate
+- On the FIRST message with a photo, analyze it and give your best estimate with REAL NUMBERS
+- For packaged products, state the exact product and its known nutrition facts confidently
+- If you see a nutrition label or packaging, use those exact numbers and say so
+- If you're less than 70% confident about portions or contents of HOME-COOKED food, ask a specific clarifying question
+- If the user provides corrections, recalculate
 - Keep your messages short and conversational — 1-3 sentences plus the data
 - When uncertain, slightly overestimate calories (users cutting fat benefit from conservative estimates)
 
 RESPONSE FORMAT:
-Always include a JSON block in your response wrapped in triple backticks with the label "food_data". Include this in EVERY response — update the numbers as the conversation refines them.
+Always include a JSON block in your response wrapped in triple backticks with the label "food_data". Include this in EVERY response — update the numbers as the conversation refines them. ALL numeric fields MUST be valid numbers (not null, not strings, not NaN).
 
 \`\`\`food_data
 {

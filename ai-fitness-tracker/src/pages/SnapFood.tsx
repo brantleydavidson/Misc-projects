@@ -1,13 +1,45 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap } from 'lucide-react';
+import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap, PenLine } from 'lucide-react';
 import { analyzeFoodChat, lookupNutrition } from '../lib/api';
 import type { FoodMessage, FoodData, NutritionResult } from '../lib/api';
 import { addFoodEntry } from '../lib/storage';
 import { getFoodMemoryContext, addCorrection, learnFood, bumpFoodFrequency } from '../lib/food-memory';
 import type { FoodEntry } from '../types';
 
-type Mode = 'choose' | 'camera' | 'preview' | 'conversation';
+type Mode = 'choose' | 'camera' | 'preview' | 'conversation' | 'manual';
+
+/** Safely parse a number — returns 0 for NaN/undefined/null */
+function safeNum(val: unknown): number {
+  const n = Number(val);
+  return isFinite(n) ? n : 0;
+}
+
+/** Sanitize food data from AI response — ensure all numbers are valid */
+function sanitizeFoodData(raw: FoodData | null): FoodData | null {
+  if (!raw) return null;
+  return {
+    ...raw,
+    food_name: raw.food_name || 'Unknown food',
+    description: raw.description || '',
+    calories: safeNum(raw.calories),
+    protein: safeNum(raw.protein),
+    carbs: safeNum(raw.carbs),
+    fat: safeNum(raw.fat),
+    fiber: safeNum(raw.fiber),
+    confidence: safeNum(raw.confidence) || 0.5,
+    ai_analysis: raw.ai_analysis || '',
+    needs_clarification: raw.needs_clarification ?? false,
+    items: raw.items?.map(item => ({
+      ...item,
+      name: item.name || 'Item',
+      calories: safeNum(item.calories),
+      protein: safeNum(item.protein),
+      carbs: safeNum(item.carbs),
+      fat: safeNum(item.fat),
+    })),
+  };
+}
 
 export function SnapFood() {
   const navigate = useNavigate();
@@ -28,8 +60,18 @@ export function SnapFood() {
   const [foodData, setFoodData] = useState<FoodData | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [initialFoodData, setInitialFoodData] = useState<FoodData | null>(null); // track first estimate for corrections
+  const [initialFoodData, setInitialFoodData] = useState<FoodData | null>(null);
   const [nutritionCache, setNutritionCache] = useState<NutritionResult[]>([]);
+
+  // Manual entry state
+  const [manualForm, setManualForm] = useState({
+    food_name: '',
+    calories: '',
+    protein: '',
+    carbs: '',
+    fat: '',
+    fiber: '',
+  });
 
   // Auto-detect meal type from time of day
   useEffect(() => {
@@ -105,27 +147,28 @@ export function SnapFood() {
       image: base64,
     };
 
-    // Get food memory context for the AI
     const memoryContext = getFoodMemoryContext();
 
     try {
       const res = await analyzeFoodChat([firstMsg], mealType, memoryContext || undefined);
+      const sanitized = sanitizeFoodData(res.food_data);
+
       setApiMessages([
         firstMsg,
         { role: 'assistant', content: res.message + (res.food_data ? `\n\`\`\`food_data\n${JSON.stringify(res.food_data)}\n\`\`\`` : '') },
       ]);
       setMessages([{ role: 'assistant', content: res.message }]);
-      if (res.food_data) {
-        setFoodData(res.food_data);
-        setInitialFoodData(res.food_data); // Track for correction detection
+
+      if (sanitized) {
+        setFoodData(sanitized);
+        setInitialFoodData(sanitized);
 
         // Background: look up USDA nutrition data for identified items
-        const itemNames = res.food_data.items?.map(i => i.name) || [res.food_data.food_name];
+        const itemNames = sanitized.items?.map(i => i.name) || [sanitized.food_name];
         lookupNutrition(itemNames)
           .then(({ results }) => {
             if (results.length > 0) {
               setNutritionCache(results);
-              // Auto-learn from USDA data
               for (const r of results) {
                 learnFood({
                   name: r.name,
@@ -142,7 +185,7 @@ export function SnapFood() {
               }
             }
           })
-          .catch(() => {}); // Non-blocking
+          .catch(() => {});
       }
     } catch (err: any) {
       setError(err.message || 'Failed to analyze food.');
@@ -167,12 +210,14 @@ export function SnapFood() {
     try {
       const memoryContext = getFoodMemoryContext();
       const res = await analyzeFoodChat(updatedApi, mealType, memoryContext || undefined, nutritionCache.length > 0 ? nutritionCache : undefined);
+      const sanitized = sanitizeFoodData(res.food_data);
+
       setApiMessages(prev => [
         ...prev,
         { role: 'assistant', content: res.message + (res.food_data ? `\n\`\`\`food_data\n${JSON.stringify(res.food_data)}\n\`\`\`` : '') },
       ]);
       setMessages(prev => [...prev, { role: 'assistant', content: res.message }]);
-      if (res.food_data) setFoodData(res.food_data);
+      if (sanitized) setFoodData(sanitized);
     } catch (err: any) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Connection issue: ${err.message}` }]);
     } finally {
@@ -180,52 +225,78 @@ export function SnapFood() {
     }
   }
 
-  const logFood = () => {
-    if (!foodData) return;
+  // Log food (from AI analysis or manual entry)
+  const logFood = (overrideData?: FoodData) => {
+    const data = overrideData || foodData;
+    if (!data) return;
 
-    // Detect if the user corrected the AI's estimates through conversation
-    if (initialFoodData && (
-      Math.abs(foodData.calories - initialFoodData.calories) > 20 ||
-      Math.abs(foodData.protein - initialFoodData.protein) > 3
+    // Detect if the user corrected the AI's estimates
+    if (!overrideData && initialFoodData && (
+      Math.abs(data.calories - initialFoodData.calories) > 20 ||
+      Math.abs(data.protein - initialFoodData.protein) > 3
     )) {
-      // Record the correction for future improvement
       const lastUserMsg = messages.filter(m => m.role === 'user').pop();
       addCorrection(
         { name: initialFoodData.food_name, calories: initialFoodData.calories, protein: initialFoodData.protein, carbs: initialFoodData.carbs, fat: initialFoodData.fat },
-        { name: foodData.food_name, calories: foodData.calories, protein: foodData.protein, carbs: foodData.carbs, fat: foodData.fat },
+        { name: data.food_name, calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat },
         lastUserMsg?.content || 'user corrected via conversation'
       );
     }
 
-    // Learn this food for future recognition
     learnFood({
-      name: foodData.food_name,
+      name: data.food_name,
       aliases: [],
-      calories: foodData.calories,
-      protein: foodData.protein,
-      carbs: foodData.carbs,
-      fat: foodData.fat,
-      fiber: foodData.fiber,
-      source: foodData.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
-      confidence: foodData.confidence,
+      calories: data.calories,
+      protein: data.protein,
+      carbs: data.carbs,
+      fat: data.fat,
+      fiber: data.fiber,
+      source: data.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
+      confidence: data.confidence,
     });
-    bumpFoodFrequency(foodData.food_name);
+    bumpFoodFrequency(data.food_name);
 
     addFoodEntry({
-      food_name: foodData.food_name,
-      description: foodData.description,
-      calories: foodData.calories,
-      protein: foodData.protein,
-      carbs: foodData.carbs,
-      fat: foodData.fat,
-      fiber: foodData.fiber,
+      food_name: data.food_name,
+      description: data.description,
+      calories: data.calories,
+      protein: data.protein,
+      carbs: data.carbs,
+      fat: data.fat,
+      fiber: data.fiber,
       meal_type: mealType,
-      ai_analysis: foodData.ai_analysis,
-      confidence: foodData.confidence,
+      ai_analysis: data.ai_analysis,
+      confidence: data.confidence,
       image_base64: imageData || undefined,
     });
     navigate('/');
   };
+
+  // Manual food entry
+  const logManual = () => {
+    if (!manualForm.food_name.trim() || !manualForm.calories) return;
+    const data: FoodData = {
+      food_name: manualForm.food_name.trim(),
+      description: 'Manual entry',
+      calories: safeNum(manualForm.calories),
+      protein: safeNum(manualForm.protein),
+      carbs: safeNum(manualForm.carbs),
+      fat: safeNum(manualForm.fat),
+      fiber: safeNum(manualForm.fiber),
+      confidence: 1.0,
+      ai_analysis: 'Manually entered',
+      needs_clarification: false,
+    };
+    logFood(data);
+  };
+
+  // Inline macro edit
+  const [editingMacro, setEditingMacro] = useState<string | null>(null);
+
+  function updateMacro(field: keyof FoodData, value: string) {
+    if (!foodData) return;
+    setFoodData({ ...foodData, [field]: safeNum(value) });
+  }
 
   const reset = () => {
     stopCamera();
@@ -237,8 +308,11 @@ export function SnapFood() {
     setMessages([]);
     setApiMessages([]);
     setInput('');
+    setEditingMacro(null);
     setMode('choose');
   };
+
+  const hasValidMacros = foodData && foodData.calories > 0;
 
   return (
     <div className="min-h-screen bg-deep-navy flex flex-col">
@@ -247,8 +321,10 @@ export function SnapFood() {
         <button onClick={() => { stopCamera(); navigate('/'); }} className="text-slate-400">
           <X size={24} />
         </button>
-        <h1 className="text-lg font-bold gradient-text">Snap Food</h1>
-        {mode === 'conversation' ? (
+        <h1 className="text-lg font-bold gradient-text">
+          {mode === 'manual' ? 'Manual Entry' : 'Snap Food'}
+        </h1>
+        {(mode === 'conversation' || mode === 'manual') ? (
           <button onClick={reset} className="text-slate-400"><RotateCcw size={20} /></button>
         ) : (
           <div className="w-6" />
@@ -274,25 +350,34 @@ export function SnapFood() {
 
       {/* Choose mode */}
       {mode === 'choose' && (
-        <div className="px-4 space-y-4 mt-8 flex-1">
-          <p className="text-center text-slate-400 text-sm mb-8">
-            Take a photo and APEX will analyze it — ask questions if needed, then log when you're happy.
+        <div className="px-4 space-y-3 mt-4 flex-1">
+          <p className="text-center text-slate-400 text-sm mb-6">
+            Snap a photo, upload from gallery, or type it in manually.
           </p>
           <button onClick={startCamera}
-            className="w-full py-16 rounded-2xl border-2 border-dashed border-neon-teal/40 bg-neon-teal/5 flex flex-col items-center gap-3 hover:bg-neon-teal/10 transition"
+            className="w-full py-12 rounded-2xl border-2 border-dashed border-neon-teal/40 bg-neon-teal/5 flex flex-col items-center gap-3 hover:bg-neon-teal/10 transition"
           >
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center pulse-ring">
-              <Camera size={28} className="text-white" />
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center pulse-ring">
+              <Camera size={24} className="text-white" />
             </div>
             <span className="text-white font-medium">Take Photo</span>
-            <span className="text-slate-500 text-xs">Use your camera to snap food</span>
+            <span className="text-slate-500 text-xs">AI identifies food + estimates macros</span>
           </button>
-          <button onClick={() => fileInputRef.current?.click()}
-            className="w-full py-6 rounded-2xl glass flex items-center justify-center gap-3 hover:bg-white/10 transition"
-          >
-            <Image size={20} className="text-neon-pink" />
-            <span className="text-slate-300">Upload from Gallery</span>
-          </button>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => fileInputRef.current?.click()}
+              className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+            >
+              <Image size={20} className="text-neon-pink" />
+              <span className="text-slate-300 text-sm">Gallery</span>
+            </button>
+            <button onClick={() => setMode('manual')}
+              className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+            >
+              <PenLine size={20} className="text-neon-teal" />
+              <span className="text-slate-300 text-sm">Type It In</span>
+            </button>
+          </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
         </div>
       )}
@@ -330,6 +415,59 @@ export function SnapFood() {
         </div>
       )}
 
+      {/* Manual entry mode */}
+      {mode === 'manual' && (
+        <div className="px-4 space-y-4 flex-1 pb-24">
+          <div className="glass rounded-2xl p-4 space-y-3">
+            <div>
+              <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 block">Food name</label>
+              <input
+                value={manualForm.food_name}
+                onChange={e => setManualForm(f => ({ ...f, food_name: e.target.value }))}
+                placeholder="e.g. Chicken breast, Core Power shake..."
+                className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <ManualField label="Calories" value={manualForm.calories} unit="kcal" color="text-orange-400"
+                onChange={v => setManualForm(f => ({ ...f, calories: v }))} />
+              <ManualField label="Protein" value={manualForm.protein} unit="g" color="text-neon-teal"
+                onChange={v => setManualForm(f => ({ ...f, protein: v }))} />
+              <ManualField label="Carbs" value={manualForm.carbs} unit="g" color="text-neon-pink"
+                onChange={v => setManualForm(f => ({ ...f, carbs: v }))} />
+              <ManualField label="Fat" value={manualForm.fat} unit="g" color="text-yellow-400"
+                onChange={v => setManualForm(f => ({ ...f, fat: v }))} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <ManualField label="Fiber" value={manualForm.fiber} unit="g" color="text-green-400"
+                onChange={v => setManualForm(f => ({ ...f, fiber: v }))} />
+              <div /> {/* spacer */}
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-500 text-center">
+            Tip: Check the nutrition label or Google "{manualForm.food_name || 'food'} nutrition facts"
+          </p>
+
+          <div className="flex gap-3">
+            <button onClick={reset}
+              className="flex-1 py-3 rounded-xl glass text-slate-300 flex items-center justify-center gap-2"
+            >
+              <RotateCcw size={16} /> Cancel
+            </button>
+            <button onClick={logManual}
+              disabled={!manualForm.food_name.trim() || !manualForm.calories}
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-30"
+            >
+              <Check size={16} /> Log It
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Conversation mode */}
       {mode === 'conversation' && (
         <>
@@ -340,38 +478,57 @@ export function SnapFood() {
             </div>
           )}
 
-          {/* Food data card (if available) */}
+          {/* Food data card (editable) */}
           {foodData && (
             <div className="px-4 mb-2 flex-shrink-0">
               <div className="glass rounded-xl p-3">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-semibold text-white">{foodData.food_name}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                    foodData.needs_clarification
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-green-500/20 text-green-400'
+                    !hasValidMacros
+                      ? 'bg-red-500/20 text-red-400'
+                      : foodData.needs_clarification
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-green-500/20 text-green-400'
                   }`}>
-                    {foodData.needs_clarification ? 'Needs clarification' : `${Math.round(foodData.confidence * 100)}% confident`}
+                    {!hasValidMacros ? 'Tap to edit' :
+                      foodData.needs_clarification ? 'Needs clarification' :
+                      `${Math.round(foodData.confidence * 100)}% confident`}
                   </span>
                 </div>
+
+                {/* Editable macro grid */}
                 <div className="grid grid-cols-4 gap-2 text-center">
-                  <div>
-                    <div className="text-sm font-bold text-orange-400 font-data">{Math.round(foodData.calories)}</div>
-                    <div className="text-[9px] text-slate-500">kcal</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-neon-teal font-data">{Math.round(foodData.protein)}g</div>
-                    <div className="text-[9px] text-slate-500">protein</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-neon-pink font-data">{Math.round(foodData.carbs)}g</div>
-                    <div className="text-[9px] text-slate-500">carbs</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-neon-pink font-data">{Math.round(foodData.fat)}g</div>
-                    <div className="text-[9px] text-slate-500">fat</div>
-                  </div>
+                  <EditableMacro
+                    label="Calories" unit="kcal" value={foodData.calories} color="text-orange-400"
+                    editing={editingMacro === 'calories'}
+                    onTap={() => setEditingMacro(editingMacro === 'calories' ? null : 'calories')}
+                    onChange={v => updateMacro('calories', v)}
+                  />
+                  <EditableMacro
+                    label="Protein" unit="g" value={foodData.protein} color="text-neon-teal"
+                    editing={editingMacro === 'protein'}
+                    onTap={() => setEditingMacro(editingMacro === 'protein' ? null : 'protein')}
+                    onChange={v => updateMacro('protein', v)}
+                  />
+                  <EditableMacro
+                    label="Carbs" unit="g" value={foodData.carbs} color="text-neon-pink"
+                    editing={editingMacro === 'carbs'}
+                    onTap={() => setEditingMacro(editingMacro === 'carbs' ? null : 'carbs')}
+                    onChange={v => updateMacro('carbs', v)}
+                  />
+                  <EditableMacro
+                    label="Fat" unit="g" value={foodData.fat} color="text-neon-pink"
+                    editing={editingMacro === 'fat'}
+                    onTap={() => setEditingMacro(editingMacro === 'fat' ? null : 'fat')}
+                    onChange={v => updateMacro('fat', v)}
+                  />
                 </div>
+
+                {/* Tap to edit hint */}
+                {!editingMacro && (
+                  <p className="text-[9px] text-slate-600 text-center mt-1.5">Tap any number to edit</p>
+                )}
 
                 {/* Item breakdown */}
                 {foodData.items && foodData.items.length > 1 && (
@@ -411,12 +568,20 @@ export function SnapFood() {
             )}
           </div>
 
-          {/* Quick actions + input */}
+          {/* Actions + input */}
           <div className="flex-shrink-0 px-4 pb-24 pt-2 space-y-2">
-            {/* Quick clarification buttons */}
+            {/* Quick clarification chips */}
             {foodData && !loading && (
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                {foodData.needs_clarification ? (
+                {!hasValidMacros ? (
+                  <>
+                    <QuickChip label="Look up this product" onTap={() => handleSend(`Can you look up the exact nutrition for ${foodData.food_name}? It's a packaged product.`)} />
+                    <QuickChip label="I'll type it in" onTap={() => {
+                      setManualForm({ food_name: foodData.food_name, calories: '', protein: '', carbs: '', fat: '', fiber: '' });
+                      setMode('manual');
+                    }} />
+                  </>
+                ) : foodData.needs_clarification ? (
                   <>
                     <QuickChip label="Looks right" onTap={() => handleSend("That looks right, log it")} />
                     <QuickChip label="Bigger portion" onTap={() => handleSend("The portions were bigger than that")} />
@@ -426,7 +591,18 @@ export function SnapFood() {
                   <>
                     <QuickChip label="Portion was bigger" onTap={() => handleSend("The portions were bigger than that")} />
                     <QuickChip label="Portion was smaller" onTap={() => handleSend("Portions were smaller")} />
-                    <QuickChip label="I had more items" onTap={() => handleSend("There were more items I ate that you didn't catch")} />
+                    <QuickChip label="More items" onTap={() => handleSend("There were more items I ate that you didn't catch")} />
+                    <QuickChip label="Edit manually" onTap={() => {
+                      setManualForm({
+                        food_name: foodData.food_name,
+                        calories: String(foodData.calories || ''),
+                        protein: String(foodData.protein || ''),
+                        carbs: String(foodData.carbs || ''),
+                        fat: String(foodData.fat || ''),
+                        fiber: String(foodData.fiber || ''),
+                      });
+                      setMode('manual');
+                    }} />
                   </>
                 )}
               </div>
@@ -451,10 +627,10 @@ export function SnapFood() {
                 </button>
               </div>
 
-              {/* Log button */}
-              {foodData && !foodData.needs_clarification && (
+              {/* Log button — only when we have valid macros */}
+              {hasValidMacros && !foodData!.needs_clarification && (
                 <button
-                  onClick={logFood}
+                  onClick={() => logFood()}
                   className="h-12 px-4 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold text-sm flex items-center gap-1.5 flex-shrink-0"
                 >
                   <Check size={16} /> Log
@@ -464,6 +640,52 @@ export function SnapFood() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Sub-components ──────────────────────────────────────────────────
+
+function EditableMacro({ label, unit, value, color, editing, onTap, onChange }: {
+  label: string; unit: string; value: number; color: string;
+  editing: boolean; onTap: () => void; onChange: (v: string) => void;
+}) {
+  return (
+    <div className="cursor-pointer" onClick={onTap}>
+      {editing ? (
+        <input
+          type="number"
+          value={value || ''}
+          onChange={e => onChange(e.target.value)}
+          onClick={e => e.stopPropagation()}
+          autoFocus
+          className={`w-full bg-white/10 rounded-lg px-1 py-1 text-sm font-bold text-center border border-neon-teal/40 focus:outline-none ${color}`}
+        />
+      ) : (
+        <div className={`text-sm font-bold font-data ${color}`}>
+          {value > 0 ? Math.round(value) : '—'}
+        </div>
+      )}
+      <div className="text-[9px] text-slate-500">{unit}</div>
+      <div className="text-[9px] text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+function ManualField({ label, value, unit, color, onChange }: {
+  label: string; value: string; unit: string; color: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className={`text-[10px] font-medium mb-1 block ${color}`}>{label} ({unit})</label>
+      <input
+        type="number"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="0"
+        className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
+      />
     </div>
   );
 }

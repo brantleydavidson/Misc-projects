@@ -124,6 +124,32 @@ export async function syncGarminData(accessToken: string): Promise<unknown> {
   return post('garmin-sync', { access_token: accessToken });
 }
 
+// ── Barcode Scanning ────────────────────────────────────────────────
+
+export interface BarcodeResult {
+  found: boolean;
+  source?: string;
+  product_name?: string;
+  brand?: string;
+  nutrition?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+    sugar: number;
+    sodium_mg: number;
+    serving_size: string;
+  };
+  image_url?: string;
+  message?: string;
+}
+
+export async function lookupBarcode(barcode: string): Promise<BarcodeResult> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<BarcodeResult>('barcode-lookup', { barcode, device_id: deviceId });
+}
+
 // ── Usage & Tier ────────────────────────────────────────────────────
 
 export type UsageAction = 'food_snap' | 'coach_message' | 'meal_plan' | 'nutrition_lookup';
