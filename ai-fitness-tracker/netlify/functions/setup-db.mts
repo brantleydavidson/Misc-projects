@@ -138,11 +138,62 @@ export default async (req: Request, _context: Context) => {
       updated_at timestamptz DEFAULT now()
     );
 
+    -- Usage tracking (for tier-based rate limiting)
+    CREATE TABLE IF NOT EXISTS ja_usage (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      device_id text NOT NULL,
+      action text NOT NULL,
+      created_at timestamptz DEFAULT now()
+    );
+
+    -- Subscriptions (free/pro/unlimited tiers)
+    CREATE TABLE IF NOT EXISTS ja_subscriptions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      device_id text NOT NULL,
+      tier text NOT NULL DEFAULT 'free',
+      status text NOT NULL DEFAULT 'active',
+      source text,
+      discount_code text,
+      stripe_customer_id text,
+      stripe_subscription_id text,
+      expires_at timestamptz,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now(),
+      UNIQUE(device_id)
+    );
+
+    -- Discount codes
+    CREATE TABLE IF NOT EXISTS ja_discount_codes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      code text UNIQUE NOT NULL,
+      discount_pct integer DEFAULT 0,
+      grants_tier text,
+      duration_days integer DEFAULT 30,
+      max_uses integer,
+      times_used integer DEFAULT 0,
+      message text,
+      expires_at timestamptz,
+      created_at timestamptz DEFAULT now()
+    );
+
+    -- Discount code redemptions
+    CREATE TABLE IF NOT EXISTS ja_discount_redemptions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      discount_code_id uuid REFERENCES ja_discount_codes(id) ON DELETE CASCADE,
+      device_id text NOT NULL,
+      created_at timestamptz DEFAULT now(),
+      UNIQUE(discount_code_id, device_id)
+    );
+
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_ja_food_profile_date ON ja_food_entries(profile_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_ja_activity_profile_date ON ja_activity_logs(profile_id, log_date);
     CREATE INDEX IF NOT EXISTS idx_ja_water_profile_date ON ja_water_logs(profile_id, log_date);
     CREATE INDEX IF NOT EXISTS idx_ja_chat_profile ON ja_chat_messages(profile_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ja_usage_device_action ON ja_usage(device_id, action, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ja_subs_device ON ja_subscriptions(device_id, status);
+    CREATE INDEX IF NOT EXISTS idx_ja_discount_code ON ja_discount_codes(code);
+    CREATE INDEX IF NOT EXISTS idx_ja_profiles_email ON ja_profiles(email);
 
     -- Enable RLS
     ALTER TABLE ja_profiles ENABLE ROW LEVEL SECURITY;
@@ -151,6 +202,10 @@ export default async (req: Request, _context: Context) => {
     ALTER TABLE ja_water_logs ENABLE ROW LEVEL SECURITY;
     ALTER TABLE ja_chat_messages ENABLE ROW LEVEL SECURITY;
     ALTER TABLE ja_food_memory ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE ja_usage ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE ja_subscriptions ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE ja_discount_codes ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE ja_discount_redemptions ENABLE ROW LEVEL SECURITY;
 
     -- Permissive policies (device-id based, no auth)
     DO $$ BEGIN
@@ -170,6 +225,18 @@ export default async (req: Request, _context: Context) => {
     EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     DO $$ BEGIN
       CREATE POLICY "ja_food_memory_all" ON ja_food_memory FOR ALL USING (true) WITH CHECK (true);
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      CREATE POLICY "ja_usage_all" ON ja_usage FOR ALL USING (true) WITH CHECK (true);
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      CREATE POLICY "ja_subscriptions_all" ON ja_subscriptions FOR ALL USING (true) WITH CHECK (true);
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      CREATE POLICY "ja_discount_codes_read" ON ja_discount_codes FOR SELECT USING (true);
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      CREATE POLICY "ja_discount_redemptions_all" ON ja_discount_redemptions FOR ALL USING (true) WITH CHECK (true);
     EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `;
 

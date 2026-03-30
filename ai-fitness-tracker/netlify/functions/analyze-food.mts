@@ -1,28 +1,45 @@
 import type { Context } from "@netlify/functions";
+import {
+  handleCors, getEnv, jsonResponse, errorResponse,
+  checkRateLimit, rateLimitResponse,
+  checkUsage, recordUsage, usageLimitResponse,
+} from "./shared/utils.ts";
 
 export default async (req: Request, _context: Context) => {
+  const cors = handleCors(req);
+  if (cors) return cors;
+  const origin = req.headers.get('origin');
+
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return errorResponse("Method not allowed", 405, origin);
   }
 
-  const apiKey = typeof Deno !== "undefined"
-    ? Deno.env.get("ANTHROPIC_API_KEY")
-    : process.env.ANTHROPIC_API_KEY;
+  const apiKey = getEnv("ANTHROPIC_API_KEY");
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "API key not configured" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return errorResponse("API key not configured", 500, origin);
   }
+
+  const supabaseUrl = getEnv("SUPABASE_URL");
+  const supabaseKey = getEnv("SUPABASE_SERVICE_KEY") || getEnv("SUPABASE_ANON_KEY");
 
   try {
-    const { image, meal_type, messages, food_memory, nutrition_data } = await req.json();
+    const { image, meal_type, messages, food_memory, nutrition_data, device_id } = await req.json();
+    const deviceId = device_id || req.headers.get('x-device-id') || 'unknown';
+
+    // Rate limit: 10 food snaps per minute
+    const rl = checkRateLimit(deviceId, 'analyze-food', { windowMs: 60_000, maxRequests: 10 });
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs!, origin);
+
+    // Usage tier check
+    if (supabaseUrl && supabaseKey) {
+      const usage = await checkUsage(deviceId, 'food_snap', supabaseUrl, supabaseKey);
+      if (!usage.allowed) {
+        return usageLimitResponse(usage.used, usage.limit, usage.tier, origin);
+      }
+    }
 
     if (!image && (!messages || messages.length === 0)) {
-      return new Response(JSON.stringify({ error: "No image or messages provided" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return errorResponse("No image or messages provided", 400, origin);
     }
 
     // Build memory context section
@@ -135,10 +152,7 @@ After the JSON block, if needs_clarification is true, ask your question. If fals
 
     if (!response.ok) {
       const errText = await response.text();
-      return new Response(JSON.stringify({ error: `Claude API error: ${errText}` }), {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
+      return errorResponse(`Claude API error: ${errText}`, 502, origin);
     }
 
     const data = await response.json();
@@ -162,17 +176,13 @@ After the JSON block, if needs_clarification is true, ask your question. If fals
     // Strip the food_data block from the display message
     const displayMessage = text.replace(/```food_data\s*\n?[\s\S]*?\n?```/g, '').trim();
 
-    return new Response(JSON.stringify({
-      message: displayMessage,
-      food_data: foodData,
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    // Record usage
+    if (supabaseUrl && supabaseKey) {
+      recordUsage(deviceId, 'food_snap', supabaseUrl, supabaseKey).catch(() => {});
+    }
+
+    return jsonResponse({ message: displayMessage, food_data: foodData }, 200, origin);
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return errorResponse(err.message, 500, origin);
   }
 };

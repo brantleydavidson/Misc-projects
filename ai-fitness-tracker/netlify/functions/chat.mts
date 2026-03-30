@@ -1,22 +1,43 @@
 import type { Context } from "@netlify/functions";
+import {
+  handleCors, getEnv, jsonResponse, errorResponse,
+  checkRateLimit, rateLimitResponse,
+  checkUsage, recordUsage, usageLimitResponse,
+  sanitizeString,
+} from "./shared/utils.ts";
 
 export default async (req: Request, _context: Context) => {
+  const cors = handleCors(req);
+  if (cors) return cors;
+  const origin = req.headers.get('origin');
+
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return errorResponse("Method not allowed", 405, origin);
   }
 
-  const apiKey = typeof Deno !== "undefined"
-    ? Deno.env.get("ANTHROPIC_API_KEY")
-    : process.env.ANTHROPIC_API_KEY;
+  const apiKey = getEnv("ANTHROPIC_API_KEY");
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "API key not configured" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return errorResponse("API key not configured", 500, origin);
   }
+
+  const supabaseUrl = getEnv("SUPABASE_URL");
+  const supabaseKey = getEnv("SUPABASE_SERVICE_KEY") || getEnv("SUPABASE_ANON_KEY");
 
   try {
     const { messages, profile, context } = await req.json();
+    const deviceId = profile?.device_id || req.headers.get('x-device-id') || 'unknown';
+
+    // Rate limit: 20 coach messages per minute
+    const rl = checkRateLimit(deviceId, 'chat', { windowMs: 60_000, maxRequests: 20 });
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs!, origin);
+
+    // Usage tier check
+    if (supabaseUrl && supabaseKey) {
+      const usage = await checkUsage(deviceId, 'coach_message', supabaseUrl, supabaseKey);
+      if (!usage.allowed) {
+        return usageLimitResponse(usage.used, usage.limit, usage.tier, origin);
+      }
+    }
 
     const profileSummary = profile ? `
 USER PROFILE:
@@ -111,7 +132,7 @@ You always:
 
     const apiMessages = (messages || []).map((m: any) => ({
       role: m.role,
-      content: m.content,
+      content: sanitizeString(m.content, 10000),
     }));
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -131,23 +152,19 @@ You always:
 
     if (!response.ok) {
       const errText = await response.text();
-      return new Response(JSON.stringify({ error: `Claude API error: ${errText}` }), {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
+      return errorResponse(`Claude API error: ${errText}`, 502, origin);
     }
 
     const data = await response.json();
     const text = data.content?.[0]?.text || "Sorry, I couldn't generate a response.";
 
-    return new Response(JSON.stringify({ message: text }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    // Record usage
+    if (supabaseUrl && supabaseKey) {
+      recordUsage(deviceId, 'coach_message', supabaseUrl, supabaseKey).catch(() => {});
+    }
+
+    return jsonResponse({ message: text }, 200, origin);
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return errorResponse(err.message, 500, origin);
   }
 };

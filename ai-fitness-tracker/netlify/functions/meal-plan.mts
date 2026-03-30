@@ -1,16 +1,22 @@
 import type { Context } from "@netlify/functions";
+import {
+  handleCors, getEnv, jsonResponse, errorResponse,
+  checkRateLimit, rateLimitResponse,
+  checkUsage, recordUsage, usageLimitResponse,
+} from "./shared/utils.ts";
 
 export default async (req: Request, _context: Context) => {
+  const cors = handleCors(req);
+  if (cors) return cors;
+  const origin = req.headers.get('origin');
+
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return errorResponse("Method not allowed", 405, origin);
   }
 
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const apiKey = getEnv("ANTHROPIC_API_KEY");
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "API key not configured" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return errorResponse("API key not configured", 500, origin);
   }
 
   try {

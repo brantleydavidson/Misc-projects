@@ -123,3 +123,45 @@ export async function getGarminAuthUrl(): Promise<{ url: string }> {
 export async function syncGarminData(accessToken: string): Promise<unknown> {
   return post('garmin-sync', { access_token: accessToken });
 }
+
+// ── Usage & Tier ────────────────────────────────────────────────────
+
+export type UsageAction = 'food_snap' | 'coach_message' | 'meal_plan' | 'nutrition_lookup';
+export type Tier = 'free' | 'pro' | 'unlimited';
+
+export interface UsageCheckResult {
+  allowed: boolean;
+  used: number;
+  limit: number;
+  tier: Tier;
+  limits_overview: Record<string, number>;
+}
+
+export async function checkUsage(action: UsageAction): Promise<UsageCheckResult> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<UsageCheckResult>('check-usage', { device_id: deviceId, action });
+}
+
+export interface DiscountResult {
+  valid: boolean;
+  discount_pct?: number;
+  grants_tier?: Tier;
+  duration_days?: number;
+  message: string;
+}
+
+export async function validateDiscount(code: string): Promise<DiscountResult> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<DiscountResult>('validate-discount', { code, device_id: deviceId });
+}
+
+// ── Email ───────────────────────────────────────────────────────────
+
+export async function sendEmail(
+  to: string,
+  template: 'welcome' | 'weekly_report' | 'streak_milestone' | 'missed_checkin',
+  data?: Record<string, string>
+): Promise<{ sent: boolean }> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<{ sent: boolean }>('send-email', { to, template, data, device_id: deviceId });
+}

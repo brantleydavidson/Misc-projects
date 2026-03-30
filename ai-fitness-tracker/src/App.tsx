@@ -8,6 +8,7 @@ import { FoodLog } from './pages/FoodLog';
 import { Profile } from './pages/Profile';
 import { CheckIn } from './pages/CheckIn';
 import { Trends } from './pages/Trends';
+import { Upgrade } from './pages/Upgrade';
 import { Onboarding } from './pages/Onboarding';
 import { Login } from './pages/Login';
 import { useProfile } from './hooks/useProfile';
@@ -17,6 +18,7 @@ import {
 } from './lib/notifications';
 import { performFullSync, saveProfileEmail, fetchProfileByEmail } from './lib/db';
 import { saveProfile as saveProfileToStorage } from './lib/storage';
+import { sendEmail } from './lib/api';
 import type { UserProfile } from './types';
 
 type Screen = 'login' | 'onboarding' | 'app';
@@ -74,6 +76,8 @@ export default function App() {
     // Save email if authenticated
     if (user?.email) {
       saveProfileEmail(user.email).catch(() => {});
+      // Send welcome email
+      sendEmail(user.email, 'welcome', { name: user.email.split('@')[0] }).catch(() => {});
     }
     setScreen('app');
   }, [user]);
@@ -121,6 +125,7 @@ export default function App() {
             <Route path="/chat" element={<Chat profile={profile} onUpdateProfile={updateProfile} />} />
             <Route path="/log" element={<FoodLog profile={profile} />} />
             <Route path="/checkin" element={<CheckIn />} />
+            <Route path="/upgrade" element={<Upgrade onBack={() => window.history.back()} />} />
             <Route path="/profile" element={
               <Profile profile={profile} onUpdate={updateProfile} onResetOnboarding={handleResetOnboarding} />
             } />

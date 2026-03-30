@@ -1,4 +1,5 @@
 import type { Context } from "@netlify/functions";
+import { handleCors, getEnv, jsonResponse, errorResponse, checkRateLimit, rateLimitResponse } from "./shared/utils.ts";
 
 /**
  * Nutrition Research Agent
