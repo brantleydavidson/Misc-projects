@@ -1,5 +1,6 @@
 import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry } from '../types';
 import { DEFAULT_REMINDERS } from '../types';
+import * as db from './db';
 
 const KEYS = {
   PROFILE: 'macrosnap_profile',
@@ -49,6 +50,8 @@ export function saveProfile(profile: Partial<UserProfile>): UserProfile {
   const current = getProfile();
   const updated = { ...current, ...profile, device_id: getDeviceId() };
   setJSON(KEYS.PROFILE, updated);
+  // Background sync to Supabase
+  db.upsertProfile(updated).catch(() => {});
   return updated;
 }
 
@@ -66,6 +69,8 @@ export function addFoodEntry(entry: FoodEntry, date?: string): FoodEntry[] {
   entry.created_at = new Date().toISOString();
   log[key].push(entry);
   setJSON(KEYS.FOOD_LOG, log);
+  // Sync to Supabase
+  db.syncFoodEntries(key, log[key]).catch(() => {});
   return log[key];
 }
 
@@ -88,6 +93,8 @@ export function addWater(ml: number, date?: string): number {
   const key = date || todayKey();
   log[key] = (log[key] || 0) + ml;
   setJSON(KEYS.WATER_LOG, log);
+  // Sync to Supabase
+  db.syncWater(key, log[key]).catch(() => {});
   return log[key];
 }
 
@@ -104,8 +111,9 @@ export function saveActivityData(data: Partial<GarminData>, date?: string): Garm
   const updated = { ...current, ...data, last_synced: new Date().toISOString() };
   log[key] = updated;
   setJSON(KEYS.ACTIVITY_LOG, log);
-  // Also write to legacy key for backward compat with dashboard
   setJSON(KEYS.GARMIN, updated);
+  // Sync to Supabase
+  db.syncActivityData(key, updated).catch(() => {});
   return updated;
 }
 

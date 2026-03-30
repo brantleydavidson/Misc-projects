@@ -9,17 +9,27 @@ import { Profile } from './pages/Profile';
 import { CheckIn } from './pages/CheckIn';
 import { Onboarding } from './pages/Onboarding';
 import { useProfile } from './hooks/useProfile';
-import { scheduleAllReminders, getNotificationPermission } from './lib/notifications';
+import {
+  registerServiceWorker, scheduleAllReminders, getNotificationPermission,
+} from './lib/notifications';
+import { performFullSync } from './lib/db';
 
 export default function App() {
   const { profile, updateProfile } = useProfile();
   const [showOnboarding, setShowOnboarding] = useState(!profile.onboarding_complete);
 
-  // Start notification scheduling on mount if permission granted
+  // Register service worker + schedule notifications + initial Supabase sync
   useEffect(() => {
-    if (getNotificationPermission() === 'granted') {
-      scheduleAllReminders();
-    }
+    registerServiceWorker().then(() => {
+      if (getNotificationPermission() === 'granted') {
+        scheduleAllReminders();
+      }
+    });
+
+    // Sync local data to Supabase on app load
+    performFullSync().then(result => {
+      if (result.synced) console.log('[App] Supabase sync complete');
+    });
   }, []);
 
   const handleOnboardingComplete = useCallback(() => {

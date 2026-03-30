@@ -1,7 +1,25 @@
 import type { ReminderSchedule } from '../types';
 import { getReminders } from './storage';
 
-let scheduledTimers: ReturnType<typeof setTimeout>[] = [];
+// ── Service Worker Registration ────────────────────────────────────
+
+let swRegistration: ServiceWorkerRegistration | null = null;
+
+export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!('serviceWorker' in navigator)) return null;
+
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    swRegistration = reg;
+    console.log('[App] Service Worker registered');
+    return reg;
+  } catch (err) {
+    console.error('[App] Service Worker registration failed:', err);
+    return null;
+  }
+}
+
+// ── Permission ─────────────────────────────────────────────────────
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!('Notification' in window)) return false;
@@ -16,77 +34,69 @@ export function getNotificationPermission(): 'granted' | 'denied' | 'default' | 
   return Notification.permission;
 }
 
-function sendNotification(title: string, body: string, tag: string) {
-  if (Notification.permission !== 'granted') return;
-
-  const notification = new Notification(title, {
-    body,
-    tag,  // prevents duplicates
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
-    requireInteraction: false,
-  });
-
-  notification.onclick = () => {
-    window.focus();
-    notification.close();
-  };
-
-  // Auto-close after 10 seconds
-  setTimeout(() => notification.close(), 10000);
-}
-
-function msUntilTime(timeStr: string): number {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  const now = new Date();
-  const target = new Date();
-  target.setHours(hours, minutes, 0, 0);
-
-  // If time already passed today, schedule for tomorrow
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-
-  return target.getTime() - now.getTime();
-}
-
-function shouldFireToday(reminder: ReminderSchedule): boolean {
-  if (!reminder.enabled) return false;
-  if (reminder.days.length === 0) return true; // every day
-  const today = new Date().getDay();
-  return reminder.days.includes(today);
-}
+// ── Schedule via Service Worker (survives tab close) ───────────────
 
 export function scheduleAllReminders() {
-  // Clear existing timers
-  clearAllReminders();
-
   const reminders = getReminders();
 
-  reminders.forEach(reminder => {
-    if (!shouldFireToday(reminder)) return;
+  // Try service worker first (survives tab close)
+  if (swRegistration?.active) {
+    swRegistration.active.postMessage({
+      type: 'SCHEDULE_ALL_REMINDERS',
+      reminders,
+    });
+    console.log('[App] Reminders scheduled via Service Worker');
+    return;
+  }
 
-    const ms = msUntilTime(reminder.time);
+  // Fallback: direct notifications (only while tab is open)
+  scheduleDirectReminders(reminders);
+}
+
+// ── Fallback: setTimeout-based (tab must be open) ──────────────────
+
+let directTimers: ReturnType<typeof setTimeout>[] = [];
+
+function scheduleDirectReminders(reminders: ReminderSchedule[]) {
+  directTimers.forEach(t => clearTimeout(t));
+  directTimers = [];
+
+  const now = new Date();
+
+  reminders.forEach(reminder => {
+    if (!reminder.enabled) return;
+    if (reminder.days.length > 0 && !reminder.days.includes(now.getDay())) return;
+
+    const [hours, minutes] = reminder.time.split(':').map(Number);
+    const target = new Date();
+    target.setHours(hours, minutes, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+
+    const delay = target.getTime() - now.getTime();
 
     const timer = setTimeout(() => {
-      sendNotification(reminder.title, reminder.body, reminder.id);
-      // Reschedule for tomorrow
-      const nextTimer = setTimeout(() => {
-        scheduleAllReminders(); // re-evaluate all
-      }, 24 * 60 * 60 * 1000);
-      scheduledTimers.push(nextTimer);
-    }, ms);
+      if (Notification.permission === 'granted') {
+        new Notification(reminder.title, {
+          body: reminder.body,
+          icon: '/favicon.svg',
+          tag: reminder.id,
+        });
+      }
+    }, delay);
 
-    scheduledTimers.push(timer);
+    directTimers.push(timer);
   });
+
+  console.log('[App] Reminders scheduled via setTimeout fallback');
 }
 
 export function clearAllReminders() {
-  scheduledTimers.forEach(t => clearTimeout(t));
-  scheduledTimers = [];
+  directTimers.forEach(t => clearTimeout(t));
+  directTimers = [];
 }
 
-// Get which check-in is "due" right now based on time of day
+// ── Check-in helpers ───────────────────────────────────────────────
+
 export function getCurrentCheckInPeriod(): 'morning' | 'midday' | 'evening' | null {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 11) return 'morning';
@@ -95,7 +105,6 @@ export function getCurrentCheckInPeriod(): 'morning' | 'midday' | 'evening' | nu
   return null;
 }
 
-// Get a friendly nudge message based on what's missing
 export function getCheckInNudge(checkIns: { morning: boolean; midday: boolean; evening: boolean }): string | null {
   const period = getCurrentCheckInPeriod();
   if (!period) return null;
@@ -109,19 +118,11 @@ export function getCheckInNudge(checkIns: { morning: boolean; midday: boolean; e
   if (period === 'evening' && !checkIns.evening) {
     return 'Evening wrap-up — final steps, calories burned, stress level';
   }
-
-  // Show next upcoming
-  if (period === 'morning' && checkIns.morning && !checkIns.midday) {
-    return null; // Morning done, midday not yet
-  }
-  if (period === 'midday' && checkIns.midday && !checkIns.evening) {
-    return null;
-  }
-
   return null;
 }
 
-// Fields that belong to each check-in period
+// ── Field definitions per check-in period ──────────────────────────
+
 export const MORNING_FIELDS = [
   { key: 'sleep_hours', label: 'Sleep Hours', icon: 'moon', step: '0.1', placeholder: '7.5' },
   { key: 'sleep_score', label: 'Sleep Score', icon: 'star', placeholder: '82' },

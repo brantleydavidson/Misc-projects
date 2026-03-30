@@ -1,0 +1,19 @@
+{
+  "name": "JackedAI - AI Fitness Coach",
+  "short_name": "JackedAI",
+  "description": "AI-powered macro tracking, food photo analysis, and personalized fitness coaching",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "fitness", "food"]
+}
