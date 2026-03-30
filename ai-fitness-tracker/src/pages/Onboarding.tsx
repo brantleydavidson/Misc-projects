@@ -245,9 +245,11 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
       setMessages(prev => [...prev, assistantMsg]);
       setTurn(t => t + 1);
     } catch (err: any) {
+      console.error('[Onboarding] API error:', err);
+      const detail = err?.message || '';
       const errMsg: Message = {
         role: 'assistant',
-        content: "Connection glitch. Try that again.",
+        content: `Connection glitch${detail ? `: ${detail}` : ''}. Try that again.`,
       };
       setMessages(prev => [...prev, errMsg]);
     } finally {
