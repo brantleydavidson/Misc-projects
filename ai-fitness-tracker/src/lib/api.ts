@@ -52,9 +52,16 @@ export interface FoodMessage {
 
 export async function analyzeFoodChat(
   messages: FoodMessage[],
-  mealType: string
+  mealType: string,
+  foodMemory?: string,
+  nutritionData?: NutritionResult[]
 ): Promise<AnalyzeFoodResponse> {
-  return post<AnalyzeFoodResponse>('analyze-food', { messages, meal_type: mealType });
+  return post<AnalyzeFoodResponse>('analyze-food', {
+    messages,
+    meal_type: mealType,
+    food_memory: foodMemory,
+    nutrition_data: nutritionData,
+  });
 }
 
 export interface ChatResponse {
@@ -67,6 +74,25 @@ export async function sendChat(
   context?: { garminData?: unknown; todaySummary?: unknown }
 ): Promise<ChatResponse> {
   return post<ChatResponse>('chat', { messages, profile, context });
+}
+
+// Nutrition research
+export interface NutritionResult {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  serving_size: string;
+  source: 'usda' | 'usda_branded' | 'ai_research';
+  confidence: number;
+  usda_fdc_id?: number;
+  brand?: string;
+}
+
+export async function lookupNutrition(foods: string[]): Promise<{ results: NutritionResult[] }> {
+  return post<{ results: NutritionResult[] }>('nutrition-lookup', { foods });
 }
 
 export interface MealPlanResponse {

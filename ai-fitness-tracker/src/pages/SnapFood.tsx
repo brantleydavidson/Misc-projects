@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap } from 'lucide-react';
-import { analyzeFoodChat } from '../lib/api';
-import type { FoodMessage, FoodData } from '../lib/api';
+import { analyzeFoodChat, lookupNutrition } from '../lib/api';
+import type { FoodMessage, FoodData, NutritionResult } from '../lib/api';
 import { addFoodEntry } from '../lib/storage';
+import { getFoodMemoryContext, addCorrection, learnFood, bumpFoodFrequency } from '../lib/food-memory';
 import type { FoodEntry } from '../types';
 
 type Mode = 'choose' | 'camera' | 'preview' | 'conversation';
@@ -27,6 +28,8 @@ export function SnapFood() {
   const [foodData, setFoodData] = useState<FoodData | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialFoodData, setInitialFoodData] = useState<FoodData | null>(null); // track first estimate for corrections
+  const [nutritionCache, setNutritionCache] = useState<NutritionResult[]>([]);
 
   // Auto-detect meal type from time of day
   useEffect(() => {
@@ -102,14 +105,45 @@ export function SnapFood() {
       image: base64,
     };
 
+    // Get food memory context for the AI
+    const memoryContext = getFoodMemoryContext();
+
     try {
-      const res = await analyzeFoodChat([firstMsg], mealType);
+      const res = await analyzeFoodChat([firstMsg], mealType, memoryContext || undefined);
       setApiMessages([
         firstMsg,
         { role: 'assistant', content: res.message + (res.food_data ? `\n\`\`\`food_data\n${JSON.stringify(res.food_data)}\n\`\`\`` : '') },
       ]);
       setMessages([{ role: 'assistant', content: res.message }]);
-      if (res.food_data) setFoodData(res.food_data);
+      if (res.food_data) {
+        setFoodData(res.food_data);
+        setInitialFoodData(res.food_data); // Track for correction detection
+
+        // Background: look up USDA nutrition data for identified items
+        const itemNames = res.food_data.items?.map(i => i.name) || [res.food_data.food_name];
+        lookupNutrition(itemNames)
+          .then(({ results }) => {
+            if (results.length > 0) {
+              setNutritionCache(results);
+              // Auto-learn from USDA data
+              for (const r of results) {
+                learnFood({
+                  name: r.name,
+                  aliases: [],
+                  calories: r.calories,
+                  protein: r.protein,
+                  carbs: r.carbs,
+                  fat: r.fat,
+                  fiber: r.fiber,
+                  serving_size: r.serving_size,
+                  source: r.source === 'usda' || r.source === 'usda_branded' ? 'usda' : 'ai_estimate',
+                  confidence: r.confidence,
+                });
+              }
+            }
+          })
+          .catch(() => {}); // Non-blocking
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to analyze food.');
       setMode('preview');
@@ -131,7 +165,8 @@ export function SnapFood() {
     setLoading(true);
 
     try {
-      const res = await analyzeFoodChat(updatedApi, mealType);
+      const memoryContext = getFoodMemoryContext();
+      const res = await analyzeFoodChat(updatedApi, mealType, memoryContext || undefined, nutritionCache.length > 0 ? nutritionCache : undefined);
       setApiMessages(prev => [
         ...prev,
         { role: 'assistant', content: res.message + (res.food_data ? `\n\`\`\`food_data\n${JSON.stringify(res.food_data)}\n\`\`\`` : '') },
@@ -147,6 +182,35 @@ export function SnapFood() {
 
   const logFood = () => {
     if (!foodData) return;
+
+    // Detect if the user corrected the AI's estimates through conversation
+    if (initialFoodData && (
+      Math.abs(foodData.calories - initialFoodData.calories) > 20 ||
+      Math.abs(foodData.protein - initialFoodData.protein) > 3
+    )) {
+      // Record the correction for future improvement
+      const lastUserMsg = messages.filter(m => m.role === 'user').pop();
+      addCorrection(
+        { name: initialFoodData.food_name, calories: initialFoodData.calories, protein: initialFoodData.protein, carbs: initialFoodData.carbs, fat: initialFoodData.fat },
+        { name: foodData.food_name, calories: foodData.calories, protein: foodData.protein, carbs: foodData.carbs, fat: foodData.fat },
+        lastUserMsg?.content || 'user corrected via conversation'
+      );
+    }
+
+    // Learn this food for future recognition
+    learnFood({
+      name: foodData.food_name,
+      aliases: [],
+      calories: foodData.calories,
+      protein: foodData.protein,
+      carbs: foodData.carbs,
+      fat: foodData.fat,
+      fiber: foodData.fiber,
+      source: foodData.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
+      confidence: foodData.confidence,
+    });
+    bumpFoodFrequency(foodData.food_name);
+
     addFoodEntry({
       food_name: foodData.food_name,
       description: foodData.description,
@@ -167,6 +231,8 @@ export function SnapFood() {
     stopCamera();
     setImageData(null);
     setFoodData(null);
+    setInitialFoodData(null);
+    setNutritionCache([]);
     setError(null);
     setMessages([]);
     setApiMessages([]);

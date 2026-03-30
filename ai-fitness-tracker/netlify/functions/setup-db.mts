@@ -118,6 +118,15 @@ export default async (req: Request, _context: Context) => {
       created_at timestamptz DEFAULT now()
     );
 
+    -- Food memory (self-improving macro estimation)
+    CREATE TABLE IF NOT EXISTS ja_food_memory (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      profile_id uuid REFERENCES ja_profiles(id) ON DELETE CASCADE UNIQUE,
+      corrections jsonb DEFAULT '[]',
+      learned_foods jsonb DEFAULT '[]',
+      updated_at timestamptz DEFAULT now()
+    );
+
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_ja_food_profile_date ON ja_food_entries(profile_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_ja_activity_profile_date ON ja_activity_logs(profile_id, log_date);
@@ -130,6 +139,7 @@ export default async (req: Request, _context: Context) => {
     ALTER TABLE ja_activity_logs ENABLE ROW LEVEL SECURITY;
     ALTER TABLE ja_water_logs ENABLE ROW LEVEL SECURITY;
     ALTER TABLE ja_chat_messages ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE ja_food_memory ENABLE ROW LEVEL SECURITY;
 
     -- Permissive policies (device-id based, no auth)
     DO $$ BEGIN
@@ -146,6 +156,9 @@ export default async (req: Request, _context: Context) => {
     EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     DO $$ BEGIN
       CREATE POLICY "ja_chat_messages_all" ON ja_chat_messages FOR ALL USING (true) WITH CHECK (true);
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      CREATE POLICY "ja_food_memory_all" ON ja_food_memory FOR ALL USING (true) WITH CHECK (true);
     EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `;
 

@@ -16,7 +16,7 @@ export default async (req: Request, _context: Context) => {
   }
 
   try {
-    const { image, meal_type, messages } = await req.json();
+    const { image, meal_type, messages, food_memory, nutrition_data } = await req.json();
 
     if (!image && (!messages || messages.length === 0)) {
       return new Response(JSON.stringify({ error: "No image or messages provided" }), {
@@ -25,14 +25,33 @@ export default async (req: Request, _context: Context) => {
       });
     }
 
-    const systemPrompt = `You are APEX's food analysis module inside JackedAI. You are an expert nutritionist who identifies food from photos and estimates macronutrients with high accuracy.
+    // Build memory context section
+    let memoryContext = '';
+    if (food_memory) {
+      memoryContext = `\n\n--- USER'S FOOD MEMORY (self-improving system) ---\n${food_memory}\n--- END FOOD MEMORY ---\n`;
+    }
 
+    // Build nutrition research section
+    let nutritionContext = '';
+    if (nutrition_data && nutrition_data.length > 0) {
+      nutritionContext = '\n\n--- VERIFIED NUTRITION DATA (from USDA / research) ---\n';
+      for (const item of nutrition_data) {
+        nutritionContext += `• ${item.name}: ${item.calories}cal | ${item.protein}g protein | ${item.carbs}g carbs | ${item.fat}g fat | per ${item.serving_size} [source: ${item.source}, confidence: ${item.confidence}]\n`;
+      }
+      nutritionContext += 'USE this data to ground your estimates. Adjust for actual portion sizes in the photo.\n--- END NUTRITION DATA ---\n';
+    }
+
+    const systemPrompt = `You are APEX's food analysis module inside JackedAI. You are an expert nutritionist who identifies food from photos and estimates macronutrients with high accuracy.
+${memoryContext}${nutritionContext}
 YOUR APPROACH:
 1. Identify every visible food item in the photo
 2. Look carefully for nutrition labels, restaurant menus, or packaging — if visible, USE those exact values
-3. Estimate portion sizes based on visual cues (plate size, utensils, hands for scale)
-4. If you're uncertain about portions, ASK the user to clarify before giving final numbers
-5. Calculate calories and macros for each item
+3. Check the user's FOOD MEMORY for known foods — if you recognize something they've eaten before, use their verified macros
+4. Cross-reference with VERIFIED NUTRITION DATA if provided — adjust for portion size
+5. Estimate portion sizes based on visual cues (plate size, utensils, hands for scale)
+6. If you're uncertain about portions, ASK the user to clarify before giving final numbers
+7. Calculate calories and macros for each item
+8. If the user's correction history shows you tend to underestimate or overestimate, adjust accordingly
 
 CONVERSATION RULES:
 - On the FIRST message with a photo, analyze it and give your best estimate
