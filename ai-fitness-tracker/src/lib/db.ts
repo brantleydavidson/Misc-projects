@@ -41,6 +41,55 @@ export async function fetchProfile(): Promise<UserProfile | null> {
   return data;
 }
 
+/**
+ * Fetch a profile by Supabase auth user email.
+ * Used when a returning user signs in on a new device.
+ */
+export async function fetchProfileByEmail(email: string): Promise<UserProfile | null> {
+  if (!isSupabaseAvailable()) return null;
+
+  const { data, error } = await supabase!
+    .from('ja_profiles')
+    .select('*')
+    .eq('email', email)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+/**
+ * Link the current device_id to an existing profile (for cross-device login).
+ * Also stores email on the profile for future lookups.
+ */
+export async function linkProfileToDevice(profileId: string, email: string): Promise<UserProfile | null> {
+  if (!isSupabaseAvailable()) return null;
+  const deviceId = getDeviceId();
+
+  const { data, error } = await supabase!
+    .from('ja_profiles')
+    .update({ device_id: deviceId, email })
+    .eq('id', profileId)
+    .select()
+    .single();
+
+  if (error) { console.error('Profile link error:', error); return null; }
+  return data;
+}
+
+/**
+ * Save email on the profile for cross-device retrieval.
+ */
+export async function saveProfileEmail(email: string): Promise<void> {
+  if (!isSupabaseAvailable()) return;
+  const deviceId = getDeviceId();
+
+  await supabase!
+    .from('ja_profiles')
+    .update({ email })
+    .eq('device_id', deviceId);
+}
+
 // ── Food Entries ───────────────────────────────────────────────────
 
 export async function syncFoodEntries(date: string, entries: FoodEntry[]): Promise<void> {
