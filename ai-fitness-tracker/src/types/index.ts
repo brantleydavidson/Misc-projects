@@ -36,6 +36,12 @@ export interface UserProfile {
   fat_target?: number;
   water_target_liters?: number;
   onboarding_complete?: boolean;
+  // Notification preferences
+  notifications_enabled?: boolean;
+  notify_morning?: string;   // "07:00"
+  notify_midday?: string;    // "13:00"
+  notify_evening?: string;   // "21:00"
+  notify_weigh_in?: string;  // "07:00"
   created_at?: string;
 }
 
@@ -57,21 +63,144 @@ export interface FoodEntry {
   created_at?: string;
 }
 
+// ── Garmin / Activity Data ─────────────────────────────────────────
+// Mirrors Garmin Connect fields. Populated manually or via API sync.
 export interface GarminData {
+  // Movement
   steps?: number;
-  calories_burned?: number;
-  active_minutes?: number;
-  heart_rate_avg?: number;
-  heart_rate_resting?: number;
-  sleep_hours?: number;
-  sleep_score?: number;
-  stress_level?: number;
-  body_battery?: number;
-  floors_climbed?: number;
   distance_km?: number;
+  floors_climbed?: number;
+  active_minutes?: number;
+  intensity_minutes_moderate?: number;
+  intensity_minutes_vigorous?: number;
+
+  // Energy
+  calories_total?: number;       // total daily calories (BMR + active)
+  calories_active?: number;      // just the active burn
+  calories_burned?: number;      // legacy alias for active
+
+  // Heart
+  heart_rate_resting?: number;
+  heart_rate_avg?: number;
+  heart_rate_max?: number;
+  hrv_status?: number;           // HRV (ms) if available
+
+  // Sleep (log in the morning)
+  sleep_hours?: number;
+  sleep_score?: number;          // Garmin 0-100
+  sleep_deep_hours?: number;
+  sleep_light_hours?: number;
+  sleep_rem_hours?: number;
+  sleep_awake_minutes?: number;
+
+  // Body / Recovery
+  body_battery_morning?: number; // body battery at wake
+  body_battery_current?: number; // body battery now
+  body_battery?: number;         // legacy
+  stress_level?: number;         // avg 0-100
+  spo2?: number;                 // blood oxygen %
+  respiration_rate?: number;     // breaths per min
+
+  // Body Comp (weekly check-in)
+  weight_kg?: number;
+  body_fat_pct?: number;
+
+  // Workout (most recent or today's)
+  workouts?: WorkoutEntry[];
+
+  // Meta
   last_synced?: string;
+  check_ins_today?: CheckInStatus;
 }
 
+export interface WorkoutEntry {
+  id?: string;
+  type: string;          // "strength", "run", "cycling", "HIIT", "swim", "walk", "yoga", etc.
+  name?: string;         // "Upper Body Push", "Zone 2 Run"
+  duration_minutes: number;
+  calories_burned?: number;
+  avg_heart_rate?: number;
+  max_heart_rate?: number;
+  distance_km?: number;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface CheckInStatus {
+  morning: boolean;
+  midday: boolean;
+  evening: boolean;
+}
+
+// ── Notification / Reminder types ──────────────────────────────────
+export interface ReminderSchedule {
+  id: string;
+  type: 'morning_checkin' | 'log_lunch' | 'midday_checkin' | 'log_dinner' | 'evening_checkin' | 'weigh_in';
+  time: string;        // "HH:MM" 24h format
+  enabled: boolean;
+  title: string;
+  body: string;
+  days: number[];      // 0=Sun, 1=Mon...6=Sat. Empty = every day
+}
+
+export const DEFAULT_REMINDERS: ReminderSchedule[] = [
+  {
+    id: 'morning_checkin',
+    type: 'morning_checkin',
+    time: '07:00',
+    enabled: true,
+    title: 'Good morning! Log your stats',
+    body: 'Sleep, resting HR, body battery, weight — quick 30-sec check-in from your Garmin.',
+    days: [],
+  },
+  {
+    id: 'log_lunch',
+    type: 'log_lunch',
+    time: '12:30',
+    enabled: true,
+    title: 'Snap your lunch',
+    body: 'Take a quick photo to log your macros. You\'re doing great today.',
+    days: [],
+  },
+  {
+    id: 'midday_checkin',
+    type: 'midday_checkin',
+    time: '14:00',
+    enabled: true,
+    title: 'Midday check-in',
+    body: 'Update your steps, active minutes, and any workouts from today.',
+    days: [],
+  },
+  {
+    id: 'log_dinner',
+    type: 'log_dinner',
+    time: '19:00',
+    enabled: true,
+    title: 'Snap your dinner',
+    body: 'Almost done for the day. Log dinner to see where your macros land.',
+    days: [],
+  },
+  {
+    id: 'evening_checkin',
+    type: 'evening_checkin',
+    time: '21:00',
+    enabled: true,
+    title: 'Evening wrap-up',
+    body: 'Final steps, calories burned, stress level — let\'s close out the day.',
+    days: [],
+  },
+  {
+    id: 'weigh_in',
+    type: 'weigh_in',
+    time: '07:15',
+    enabled: true,
+    title: 'Weekly weigh-in',
+    body: 'Step on the scale before eating. Track the trend, not the day.',
+    days: [1], // Monday only
+  },
+];
+
+// ── Other existing types ───────────────────────────────────────────
 export interface DailyLog {
   date: string;
   food_entries: FoodEntry[];
