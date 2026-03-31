@@ -4,7 +4,7 @@ import {
   Sun, Moon, Sunset, Check, Plus, X, Trash2,
   Footprints, Heart, Flame, Zap, Activity, Scale,
   Timer, ArrowUp, Wind, Brain, Star, Battery, Map, Dumbbell,
-  Camera, Loader2,
+  Camera, Loader2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import type { GarminData, WorkoutEntry, BodyPhoto, UserProfile } from '../types';
 import {
@@ -84,10 +84,23 @@ interface CheckInProps {
   profile: UserProfile;
 }
 
+function dateToKey(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function isToday(d: Date): boolean {
+  return dateToKey(d) === dateToKey(new Date());
+}
+
 export function CheckIn({ profile }: CheckInProps) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const dateParam = searchParams.get('date') || undefined;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initDate = searchParams.get('date');
+  const [selectedDate, setSelectedDate] = useState(() =>
+    initDate ? new Date(initDate + 'T12:00:00') : new Date()
+  );
+  const currentDay = isToday(selectedDate);
+  const dateParam = currentDay ? undefined : dateToKey(selectedDate);
   const currentPeriod = getCurrentCheckInPeriod();
   const [activePeriod, setActivePeriod] = useState<Period>(currentPeriod || 'morning');
   const [activityData, setActivityData] = useState<GarminData>(getActivityData(dateParam));
@@ -124,7 +137,7 @@ export function CheckIn({ profile }: CheckInProps) {
     });
     setFormData(initial);
     setSaved(false);
-  }, [activePeriod]);
+  }, [activePeriod, dateParam]);
 
   function handleSave() {
     const updates: Partial<GarminData> = {};
@@ -229,7 +242,36 @@ export function CheckIn({ profile }: CheckInProps) {
     <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-white">Activity Check-in</h1>
+        <div>
+          <h1 className="text-lg font-bold text-white">Activity Check-in</h1>
+          <div className="flex items-center gap-2 mt-0.5">
+            <button onClick={() => {
+              const d = new Date(selectedDate);
+              d.setDate(d.getDate() - 1);
+              setSelectedDate(d);
+              setSearchParams({ date: dateToKey(d) });
+            }} className="text-slate-400 hover:text-neon-teal transition p-0.5">
+              <ChevronLeft size={16} />
+            </button>
+            <button onClick={() => { setSelectedDate(new Date()); setSearchParams({}); }}
+              className="text-xs text-slate-400 hover:text-white transition min-w-[100px] text-center"
+            >
+              {currentDay ? 'Today' : selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </button>
+            <button onClick={() => {
+              if (currentDay) return;
+              const d = new Date(selectedDate);
+              d.setDate(d.getDate() + 1);
+              setSelectedDate(d);
+              if (isToday(d)) setSearchParams({});
+              else setSearchParams({ date: dateToKey(d) });
+            }} disabled={currentDay}
+              className={`p-0.5 transition ${currentDay ? 'text-slate-600 cursor-default' : 'text-slate-400 hover:text-neon-teal'}`}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
         <button onClick={() => navigate('/')} className="text-slate-400 text-sm">Done</button>
       </div>
 

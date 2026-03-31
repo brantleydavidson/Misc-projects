@@ -139,10 +139,38 @@ export function saveActivityData(data: Partial<GarminData>, date?: string): Garm
   const updated = { ...current, ...data, last_synced: new Date().toISOString() };
   log[key] = updated;
   setJSON(KEYS.ACTIVITY_LOG, log);
-  setJSON(KEYS.GARMIN, updated);
+  // Only update legacy GARMIN key when saving today's data
+  if (!date || date === todayKey()) {
+    setJSON(KEYS.GARMIN, updated);
+  }
   // Sync to Supabase
   db.syncActivityData(key, updated).catch(() => {});
   return updated;
+}
+
+export function clearActivityData(date?: string): void {
+  const log = getJSON<Record<string, GarminData>>(KEYS.ACTIVITY_LOG, {});
+  const key = date || todayKey();
+  delete log[key];
+  setJSON(KEYS.ACTIVITY_LOG, log);
+}
+
+export function moveActivityFields(fromDate: string, toDate: string, fieldKeys: string[]): void {
+  const log = getJSON<Record<string, GarminData>>(KEYS.ACTIVITY_LOG, {});
+  const fromData = log[fromDate] || {};
+  const toData = log[toDate] || {};
+
+  for (const key of fieldKeys) {
+    const val = (fromData as any)[key];
+    if (val != null) {
+      (toData as any)[key] = val;
+      delete (fromData as any)[key];
+    }
+  }
+
+  log[fromDate] = fromData;
+  log[toDate] = { ...toData, last_synced: new Date().toISOString() };
+  setJSON(KEYS.ACTIVITY_LOG, log);
 }
 
 export function addWorkout(workout: WorkoutEntry, date?: string): GarminData {
