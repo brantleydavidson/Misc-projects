@@ -228,7 +228,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
       {/* Daily Targets */}
       <div className="glass rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-white">Daily Targets</h2>
+          <h2 className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Daily Targets</h2>
           <button
             onClick={() => setEditingTargets(!editingTargets)}
             className="p-1.5 rounded-lg hover:bg-white/10 transition text-slate-400 hover:text-white"
@@ -295,7 +295,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         >
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-neon-pink" />
-            <span className="text-sm font-semibold text-white">Talk to Coach</span>
+            <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Talk to Coach</span>
             <span className="text-[10px] text-slate-400 ml-1">Brainstorm targets</span>
           </div>
           <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'coach' ? 'rotate-180' : ''}`} />
@@ -441,7 +441,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         >
           <div className="flex items-center gap-2">
             <Settings size={16} className="text-neon-teal" />
-            <span className="text-sm font-semibold text-white">Preferences</span>
+            <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Preferences</span>
           </div>
           <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'settings' ? 'rotate-180' : ''}`} />
         </button>
@@ -573,7 +573,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         >
           <div className="flex items-center gap-2">
             <Heart size={16} className="text-red-400" />
-            <span className="text-sm font-semibold text-white">Health Data</span>
+            <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Health Data</span>
           </div>
           <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'health' ? 'rotate-180' : ''}`} />
         </button>
@@ -683,7 +683,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         >
           <div className="flex items-center gap-2">
             <User size={16} className="text-neon-teal" />
-            <span className="text-sm font-semibold text-white">Account</span>
+            <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Account</span>
           </div>
           <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'account' ? 'rotate-180' : ''}`} />
         </button>

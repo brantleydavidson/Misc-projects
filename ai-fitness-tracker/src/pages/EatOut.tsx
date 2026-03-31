@@ -201,7 +201,7 @@ export function EatOut({ profile }: EatOutProps) {
             <UtensilsCrossed size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white font-display">Eat Out</h1>
+            <h1 className="text-lg font-bold text-white font-display uppercase">Eat Out</h1>
             <p className="text-xs text-slate-400">AI-powered ordering to hit your macros</p>
           </div>
         </div>
@@ -291,7 +291,7 @@ export function EatOut({ profile }: EatOutProps) {
                   <UtensilsCrossed size={16} className="text-orange-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white truncate">{r.name}</div>
+                  <div className="text-sm font-semibold text-white font-ui truncate">{r.name}</div>
                   <div className="text-[10px] text-slate-400 truncate">{r.address}</div>
                   <div className="flex items-center gap-2 mt-0.5">
                     {r.rating && (
@@ -373,7 +373,7 @@ export function EatOut({ profile }: EatOutProps) {
           return (
             <div key={i}>
               <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed font-body ${
                   msg.role === 'user'
                     ? 'bg-gradient-to-r from-orange-500 to-neon-pink text-white rounded-br-md'
                     : 'bg-white/5 text-slate-200 rounded-bl-md'
