@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Trash2, Pencil, Check, X, CalendarDays } from 'lucide-react';
 import type { UserProfile, FoodEntry } from '../types';
 import { getFoodEntries, removeFoodEntry, updateFoodEntry, moveFoodEntry, getDailySummary } from '../lib/storage';
@@ -14,7 +15,11 @@ function formatDate(d: Date): string {
 }
 
 export function FoodLog({ profile }: FoodLogProps) {
-  const [date, setDate] = useState(new Date());
+  const [searchParams] = useSearchParams();
+  const initDate = searchParams.get('date');
+  const [date, setDate] = useState(() =>
+    initDate ? new Date(initDate + 'T12:00:00') : new Date()
+  );
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [summary, setSummary] = useState(getDailySummary());
   const [editingId, setEditingId] = useState<string | null>(null);

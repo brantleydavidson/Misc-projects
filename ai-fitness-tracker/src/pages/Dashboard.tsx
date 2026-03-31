@@ -229,9 +229,11 @@ export function Dashboard({ profile }: DashboardProps) {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-300 font-semibold">Target: {targets.calories} cal</span>
             </div>
-            <div className="text-xs text-slate-500">
-              {summary.entries.length} meals logged
-            </div>
+            <button onClick={() => navigate(`/log${currentDay ? '' : `?date=${dateKey}`}`)}
+              className="text-xs text-neon-teal hover:underline transition text-left"
+            >
+              {summary.entries.length} meals logged →
+            </button>
           </div>
         </div>
       </div>
@@ -245,6 +247,36 @@ export function Dashboard({ profile }: DashboardProps) {
           <MacroBar label="Fat" value={summary.fat} target={targets.fat} color="#FF2D78" />
         </div>
       </div>
+
+      {/* Meals Logged */}
+      {summary.entries.length > 0 && (
+        <div className="glass rounded-2xl p-4">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-sm font-semibold text-white">Today's Meals</h2>
+            <button onClick={() => navigate(`/log${currentDay ? '' : `?date=${dateKey}`}`)}
+              className="text-[10px] text-neon-teal flex items-center gap-1"
+            >
+              Edit <ChevronRight size={12} />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {summary.entries.slice(0, 5).map((entry: any) => (
+              <button key={entry.id} onClick={() => navigate(`/log${currentDay ? '' : `?date=${dateKey}`}`)}
+                className="w-full flex items-center gap-2 py-1.5 border-t border-white/5 text-left hover:bg-white/5 rounded-lg transition px-1"
+              >
+                <span className="text-[10px] w-14 text-slate-500 capitalize">{entry.meal_type}</span>
+                <span className="text-xs text-white flex-1 truncate">{entry.food_name}</span>
+                <span className="text-[10px] text-slate-400 font-data">{entry.calories} cal</span>
+              </button>
+            ))}
+            {summary.entries.length > 5 && (
+              <div className="text-[10px] text-slate-500 text-center pt-1">
+                +{summary.entries.length - 5} more
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Water Tracker */}
       <div className="glass rounded-2xl p-4">
