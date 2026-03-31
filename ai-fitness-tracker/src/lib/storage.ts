@@ -1,4 +1,4 @@
-import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry, BodyPhoto } from '../types';
+import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry, BodyPhoto, Habit, HabitLog } from '../types';
 import { DEFAULT_REMINDERS } from '../types';
 import * as db from './db';
 
@@ -14,6 +14,8 @@ const KEYS = {
   REMINDERS: 'macrosnap_reminders',
   REMINDER_TIMERS: 'macrosnap_reminder_timers',
   BODY_PHOTOS: 'macrosnap_body_photos',
+  HABITS: 'jackedai_habits',
+  HABIT_LOG: 'jackedai_habit_log',
 } as const;
 
 function getDeviceId(): string {
@@ -367,4 +369,102 @@ export function removeBodyPhoto(id: string, date?: string): void {
 export function getBodyPhotoDates(): string[] {
   const all = getJSON<Record<string, BodyPhoto[]>>(KEYS.BODY_PHOTOS, {});
   return Object.keys(all).filter(k => all[k].length > 0).sort();
+}
+
+// ── Habits ──────────────────────────────────────────────────────────
+
+export function getHabits(): Habit[] {
+  return getJSON<Habit[]>(KEYS.HABITS, []);
+}
+
+export function saveHabits(habits: Habit[]): void {
+  setJSON(KEYS.HABITS, habits);
+}
+
+export function addHabit(habit: Omit<Habit, 'id' | 'created_at'>): Habit {
+  const habits = getHabits();
+  const entry: Habit = {
+    ...habit,
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+  };
+  habits.push(entry);
+  saveHabits(habits);
+  return entry;
+}
+
+export function removeHabit(id: string): void {
+  const habits = getHabits().filter(h => h.id !== id);
+  saveHabits(habits);
+}
+
+export function getHabitLog(): HabitLog {
+  return getJSON<HabitLog>(KEYS.HABIT_LOG, {});
+}
+
+export function toggleHabit(habitId: string, date?: string): boolean {
+  const log = getHabitLog();
+  const key = date || todayKey();
+  if (!log[key]) log[key] = [];
+
+  const idx = log[key].indexOf(habitId);
+  if (idx >= 0) {
+    log[key].splice(idx, 1);
+    setJSON(KEYS.HABIT_LOG, log);
+    return false; // now unchecked
+  } else {
+    log[key].push(habitId);
+    setJSON(KEYS.HABIT_LOG, log);
+    return true; // now checked
+  }
+}
+
+export function isHabitComplete(habitId: string, date?: string): boolean {
+  const log = getHabitLog();
+  const key = date || todayKey();
+  return (log[key] || []).includes(habitId);
+}
+
+export function getHabitStreak(habitId: string): number {
+  const log = getHabitLog();
+  let streak = 0;
+  const d = new Date();
+  // Check today first — if not done today, check from yesterday
+  const todayDone = (log[todayKey()] || []).includes(habitId);
+  if (!todayDone) d.setDate(d.getDate() - 1);
+
+  while (true) {
+    const key = d.toISOString().split('T')[0];
+    if ((log[key] || []).includes(habitId)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+export function getHabitCompletionRate(habitId: string, days: number = 30): number {
+  const log = getHabitLog();
+  let completed = 0;
+  const d = new Date();
+  for (let i = 0; i < days; i++) {
+    const key = d.toISOString().split('T')[0];
+    if ((log[key] || []).includes(habitId)) completed++;
+    d.setDate(d.getDate() - 1);
+  }
+  return days > 0 ? completed / days : 0;
+}
+
+export function getDailyHabitSummary(date?: string): { total: number; completed: number; habitIds: string[] } {
+  const habits = getHabits().filter(h => !h.archived);
+  const log = getHabitLog();
+  const key = date || todayKey();
+  const completedIds = log[key] || [];
+  return {
+    total: habits.length,
+    completed: completedIds.filter(id => habits.some(h => h.id === id)).length,
+    habitIds: completedIds,
+  };
 }

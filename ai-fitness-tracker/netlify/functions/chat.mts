@@ -87,6 +87,8 @@ GARMIN/HEALTH DATA:
 
 You have access to the user's real-time data:
 
+TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
+
 ${profileSummary}${supplementInfo}${peptideInfo}${healthNotes}
 ${todaySummary}
 ${garminSummary}
@@ -112,6 +114,7 @@ When the user describes food they ate (today or a past day), you should:
 3. Once you have enough detail, provide your best macro estimate and include a \`\`\`food_log JSON block so the frontend can log it directly.
 4. If the user says "log it" or confirms the estimate, include the food_log block.
 5. If they say it was yesterday or a specific day, include the "date" field (YYYY-MM-DD format).
+6. IMPORTANT: Use TODAY'S DATE above to calculate relative dates. 'Yesterday' means the day before today's date. Always verify the date is correct.
 
 The food_log block format:
 \`\`\`food_log

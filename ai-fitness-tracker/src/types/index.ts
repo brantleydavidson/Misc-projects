@@ -239,6 +239,36 @@ export const DEFAULT_REMINDERS: ReminderSchedule[] = [
   },
 ];
 
+// ── Habits ────────────────────────────────────────────────────────
+export interface Habit {
+  id: string;
+  name: string;
+  icon: string;           // emoji or lucide icon name
+  color: string;          // tailwind color class like 'green' | 'blue' | 'red' etc.
+  category: 'nutrition' | 'fitness' | 'recovery' | 'mindset' | 'custom';
+  created_at: string;
+  archived?: boolean;
+}
+
+export interface HabitLog {
+  [date: string]: string[];  // date (YYYY-MM-DD) -> array of completed habit IDs
+}
+
+export const PRESET_HABITS: Omit<Habit, 'id' | 'created_at'>[] = [
+  { name: 'No alcohol', icon: '🚫🍺', color: 'red', category: 'nutrition', archived: false },
+  { name: 'No eating after 8pm', icon: '🌙', color: 'indigo', category: 'nutrition', archived: false },
+  { name: 'Took creatine', icon: '💊', color: 'blue', category: 'nutrition', archived: false },
+  { name: 'Hit protein goal', icon: '🥩', color: 'green', category: 'nutrition', archived: false },
+  { name: '10k steps', icon: '👟', color: 'green', category: 'fitness', archived: false },
+  { name: 'Worked out', icon: '🏋️', color: 'pink', category: 'fitness', archived: false },
+  { name: 'Stretched / mobility', icon: '🧘', color: 'teal', category: 'recovery', archived: false },
+  { name: '7+ hours sleep', icon: '😴', color: 'indigo', category: 'recovery', archived: false },
+  { name: 'Cold shower / plunge', icon: '🧊', color: 'blue', category: 'recovery', archived: false },
+  { name: 'Meditated', icon: '🧠', color: 'purple', category: 'mindset', archived: false },
+  { name: 'Journaled', icon: '📝', color: 'yellow', category: 'mindset', archived: false },
+  { name: 'Read 20+ min', icon: '📖', color: 'amber', category: 'mindset', archived: false },
+];
+
 // ── Other existing types ───────────────────────────────────────────
 export interface DailyLog {
   date: string;

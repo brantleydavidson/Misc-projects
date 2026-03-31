@@ -6,7 +6,7 @@ import {
   Timer, ArrowUp, Wind, Brain, Star, Battery, Map, Dumbbell,
   Camera, Loader2,
 } from 'lucide-react';
-import type { GarminData, WorkoutEntry, BodyPhoto } from '../types';
+import type { GarminData, WorkoutEntry, BodyPhoto, UserProfile } from '../types';
 import {
   getActivityData, saveActivityData, markCheckIn, getCheckInStatus,
   addWorkout, removeWorkout, getBodyPhotos, addBodyPhoto, getBodyPhotoDates, getAllBodyPhotos,
@@ -16,6 +16,10 @@ import {
   getCurrentCheckInPeriod,
   MORNING_FIELDS, MIDDAY_FIELDS, EVENING_FIELDS,
 } from '../lib/notifications';
+import {
+  lbsToKg, displayWeightValue, weightUnit,
+  kmToMi, miToKm,
+} from '../lib/units';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   moon: <Moon size={14} className="text-indigo-400" />,
@@ -76,7 +80,11 @@ const WORKOUT_TYPES = [
   'Yoga', 'Elliptical', 'Rowing', 'Stairclimber', 'Sports', 'Other',
 ];
 
-export function CheckIn() {
+interface CheckInProps {
+  profile: UserProfile;
+}
+
+export function CheckIn({ profile }: CheckInProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get('date') || undefined;
@@ -104,7 +112,15 @@ export function CheckIn() {
     const config = PERIOD_CONFIG[activePeriod];
     config.fields.forEach(f => {
       const val = (data as any)[f.key];
-      if (val != null) initial[f.key] = val;
+      if (val != null) {
+        if (f.key === 'weight_kg') {
+          initial[f.key] = displayWeightValue(val, profile);
+        } else if (f.key === 'distance_km' && profile.unit_distance === 'mi') {
+          initial[f.key] = kmToMi(val);
+        } else {
+          initial[f.key] = val;
+        }
+      }
     });
     setFormData(initial);
     setSaved(false);
@@ -113,7 +129,14 @@ export function CheckIn() {
   function handleSave() {
     const updates: Partial<GarminData> = {};
     Object.entries(formData).forEach(([key, val]) => {
-      if (val != null) (updates as any)[key] = val;
+      if (val == null) return;
+      if (key === 'weight_kg' && profile.unit_weight === 'lbs') {
+        (updates as any)[key] = lbsToKg(val);
+      } else if (key === 'distance_km' && profile.unit_distance === 'mi') {
+        (updates as any)[key] = miToKm(val);
+      } else {
+        (updates as any)[key] = val;
+      }
     });
     const updated = saveActivityData(updates, dateParam);
     markCheckIn(activePeriod, dateParam);
@@ -261,24 +284,39 @@ export function CheckIn() {
       {/* Data fields */}
       <div className="glass rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          {config.fields.map(field => (
-            <div key={field.key}>
-              <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 mb-1">
-                {ICON_MAP[field.icon] || <Activity size={14} />} {field.label}
-              </label>
-              <input
-                type="number"
-                step={field.step}
-                value={formData[field.key] ?? ''}
-                onChange={e => setFormData(d => ({
-                  ...d,
-                  [field.key]: e.target.value ? Number(e.target.value) : undefined,
-                }))}
-                placeholder={field.placeholder}
-                className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
-              />
-            </div>
-          ))}
+          {config.fields.map(field => {
+            // Override label and placeholder for unit-sensitive fields
+            let label = field.label;
+            let placeholder = field.placeholder;
+            if (field.key === 'weight_kg') {
+              const unit = weightUnit(profile);
+              label = `Weight (${unit})`;
+              placeholder = unit === 'lbs' ? '180' : '82.5';
+            } else if (field.key === 'distance_km') {
+              if (profile.unit_distance === 'mi') {
+                label = label.replace('(km)', '(mi)').replace('km', 'mi');
+                placeholder = activePeriod === 'midday' ? '2.0' : '4.0';
+              }
+            }
+            return (
+              <div key={field.key}>
+                <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 mb-1">
+                  {ICON_MAP[field.icon] || <Activity size={14} />} {label}
+                </label>
+                <input
+                  type="number"
+                  step={field.step}
+                  value={formData[field.key] ?? ''}
+                  onChange={e => setFormData(d => ({
+                    ...d,
+                    [field.key]: e.target.value ? Number(e.target.value) : undefined,
+                  }))}
+                  placeholder={placeholder}
+                  className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
+                />
+              </div>
+            );
+          })}
         </div>
 
         <button onClick={handleSave}

@@ -9,6 +9,7 @@ import { Profile } from './pages/Profile';
 import { CheckIn } from './pages/CheckIn';
 import { Trends } from './pages/Trends';
 import { Upgrade } from './pages/Upgrade';
+import { Habits } from './pages/Habits';
 import { Onboarding } from './pages/Onboarding';
 import { Login } from './pages/Login';
 import { useProfile } from './hooks/useProfile';
@@ -124,7 +125,8 @@ export default function App() {
             <Route path="/snap" element={<SnapFood />} />
             <Route path="/chat" element={<Chat profile={profile} onUpdateProfile={updateProfile} />} />
             <Route path="/log" element={<FoodLog profile={profile} />} />
-            <Route path="/checkin" element={<CheckIn />} />
+            <Route path="/checkin" element={<CheckIn profile={profile} />} />
+            <Route path="/habits" element={<Habits />} />
             <Route path="/upgrade" element={<Upgrade onBack={() => window.history.back()} />} />
             <Route path="/profile" element={
               <Profile profile={profile} onUpdate={updateProfile} onResetOnboarding={handleResetOnboarding} />

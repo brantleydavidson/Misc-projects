@@ -8,8 +8,8 @@ import {
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
 import type { UserProfile, BodyPhoto } from '../types';
-import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus, getBodyPhotoDates, getAllBodyPhotos } from '../lib/storage';
-import { displayWater, displayWaterTarget, waterIncrements, displayWeight } from '../lib/units';
+import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus, getBodyPhotoDates, getAllBodyPhotos, getHabits, toggleHabit, isHabitComplete, getHabitStreak, getDailyHabitSummary } from '../lib/storage';
+import { displayWater, displayWaterTarget, waterIncrements, displayWeight, displayWeightValue, weightUnit } from '../lib/units';
 import {
   getCurrentCheckInPeriod, getCheckInNudge,
   requestNotificationPermission, getNotificationPermission, scheduleAllReminders,
@@ -201,7 +201,7 @@ export function Dashboard({ profile }: DashboardProps) {
       </div>
 
       {/* Calorie Ring */}
-      <div className="glass rounded-2xl p-5">
+      <div className="glass rounded-2xl p-5 cursor-pointer" onClick={() => navigate(currentDay ? '/snap' : `/snap?date=${dateKey}`)}>
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <ProgressRing value={summary.calories} max={targets.calories} size={140} strokeWidth={10} color="#00E5CC">
@@ -229,7 +229,7 @@ export function Dashboard({ profile }: DashboardProps) {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-300 font-semibold">Target: {targets.calories} cal</span>
             </div>
-            <button onClick={() => navigate(`/log${currentDay ? '' : `?date=${dateKey}`}`)}
+            <button onClick={(e) => { e.stopPropagation(); navigate(`/log${currentDay ? '' : `?date=${dateKey}`}`); }}
               className="text-xs text-neon-teal hover:underline transition text-left"
             >
               {summary.entries.length} meals logged →
@@ -303,10 +303,10 @@ export function Dashboard({ profile }: DashboardProps) {
       </div>
 
       {/* Activity Stats */}
-      <div className="glass rounded-2xl p-4">
+      <div className="glass rounded-2xl p-4 cursor-pointer" onClick={() => navigate(currentDay ? '/checkin' : `/checkin?date=${dateKey}`)}>
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-sm font-semibold text-white">Activity</h2>
-          <button onClick={() => navigate('/checkin')} className="text-[10px] text-neon-teal flex items-center gap-1">
+          <button onClick={(e) => { e.stopPropagation(); navigate(currentDay ? '/checkin' : `/checkin?date=${dateKey}`); }} className="text-[10px] text-neon-teal flex items-center gap-1">
             Update <ChevronRight size={12} />
           </button>
         </div>
@@ -380,7 +380,10 @@ export function Dashboard({ profile }: DashboardProps) {
       </div>
 
       {/* Progress Insights */}
-      <ProgressInsights navigate={navigate} />
+      <ProgressInsights navigate={navigate} profile={profile} />
+
+      {/* Habit Tracker Widget */}
+      <HabitWidget navigate={navigate} dateKey={dateKey} />
 
       {/* Quick Actions */}
       <div className="flex gap-3">
@@ -409,7 +412,7 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
   );
 }
 
-function ProgressInsights({ navigate }: { navigate: (path: string) => void }) {
+function ProgressInsights({ navigate, profile }: { navigate: (path: string) => void; profile: UserProfile }) {
   const photoDates = getBodyPhotoDates();
   const allPhotos = getAllBodyPhotos();
 
@@ -429,7 +432,9 @@ function ProgressInsights({ navigate }: { navigate: (path: string) => void }) {
   const hasWeightData = weightHistory.length >= 2;
   const latestWeight = weightHistory[weightHistory.length - 1];
   const firstWeight = weightHistory[0];
-  const weightChange = hasWeightData ? latestWeight.kg - firstWeight.kg : 0;
+  const weightChange = hasWeightData
+    ? displayWeightValue(latestWeight.kg, profile) - displayWeightValue(firstWeight.kg, profile)
+    : 0;
 
   // Get most recent and earliest photos for comparison
   const latestPhotoDate = photoDates[photoDates.length - 1];
@@ -479,9 +484,9 @@ function ProgressInsights({ navigate }: { navigate: (path: string) => void }) {
           )}
           <div className="flex-1">
             <div className="text-xs text-white font-data">
-              {latestWeight.kg.toFixed(1)} kg
+              {displayWeight(latestWeight.kg, profile)}
               <span className={`ml-2 text-[10px] ${weightChange <= 0 ? 'text-green-400' : 'text-orange-400'}`}>
-                {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} kg
+                {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} {weightUnit(profile)}
               </span>
             </div>
             <div className="text-[10px] text-slate-500">
@@ -527,6 +532,88 @@ function ProgressInsights({ navigate }: { navigate: (path: string) => void }) {
         <div className="text-[10px] text-slate-500 text-center">
           {photoDates.length} photo sessions tracked
         </div>
+      )}
+    </div>
+  );
+}
+
+function HabitWidget({ navigate, dateKey }: { navigate: (path: string) => void; dateKey: string }) {
+  const habits = getHabits().filter(h => !h.archived);
+  const [_, forceUpdate] = useState(0);
+
+  if (habits.length === 0) {
+    return (
+      <button onClick={() => navigate('/habits')}
+        className="w-full glass rounded-2xl p-4 flex items-center gap-4 hover:bg-white/5 transition"
+      >
+        <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+          <Flame size={20} className="text-orange-400" />
+        </div>
+        <div className="flex-1 text-left">
+          <div className="text-sm font-semibold text-white">Build Daily Habits</div>
+          <div className="text-[10px] text-slate-400">Track streaks, consistency, and build routines</div>
+        </div>
+        <ChevronRight size={16} className="text-slate-500" />
+      </button>
+    );
+  }
+
+  const summary = getDailyHabitSummary(dateKey);
+  const pct = summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0;
+
+  function handleToggle(habitId: string) {
+    toggleHabit(habitId, dateKey);
+    forceUpdate(n => n + 1);
+  }
+
+  return (
+    <div className="glass rounded-2xl p-4 space-y-3">
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Flame size={16} className="text-orange-400" />
+          Habits
+        </h2>
+        <button onClick={() => navigate('/habits')}
+          className="text-[10px] text-orange-400 flex items-center gap-1"
+        >
+          {summary.completed}/{summary.total} · {pct}% <ChevronRight size={12} />
+        </button>
+      </div>
+
+      <div className="space-y-1.5">
+        {habits.slice(0, 6).map(habit => {
+          const done = isHabitComplete(habit.id, dateKey);
+          const streak = getHabitStreak(habit.id);
+          return (
+            <button key={habit.id} onClick={() => handleToggle(habit.id)}
+              className={`w-full flex items-center gap-2.5 py-2 px-2 rounded-xl transition ${
+                done ? 'bg-green-500/5' : 'hover:bg-white/5'
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition text-xs ${
+                done ? 'bg-green-500 text-white' : 'bg-white/10 text-slate-500'
+              }`}>
+                {done ? <Check size={14} /> : <span className="text-[10px]">{habit.icon}</span>}
+              </div>
+              <span className={`text-xs flex-1 text-left ${done ? 'text-green-400 line-through' : 'text-white'}`}>
+                {habit.name}
+              </span>
+              {streak > 0 && (
+                <span className="text-[9px] text-orange-400 flex items-center gap-0.5">
+                  <Flame size={8} />{streak}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {habits.length > 6 && (
+        <button onClick={() => navigate('/habits')}
+          className="w-full text-[10px] text-slate-500 text-center pt-1"
+        >
+          +{habits.length - 6} more habits →
+        </button>
       )}
     </div>
   );
