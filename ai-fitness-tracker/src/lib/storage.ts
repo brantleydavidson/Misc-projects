@@ -1,4 +1,4 @@
-import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry, BodyPhoto, Habit, HabitLog } from '../types';
+import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry, BodyPhoto, Habit, HabitLog, TargetChangeEntry } from '../types';
 import { DEFAULT_REMINDERS } from '../types';
 import * as db from './db';
 
@@ -16,6 +16,7 @@ const KEYS = {
   BODY_PHOTOS: 'macrosnap_body_photos',
   HABITS: 'jackedai_habits',
   HABIT_LOG: 'jackedai_habit_log',
+  TARGET_HISTORY: 'jackedai_target_history',
 } as const;
 
 function getDeviceId(): string {
@@ -495,4 +496,42 @@ export function getDailyHabitSummary(date?: string): { total: number; completed:
     completed: completedIds.filter(id => habits.some(h => h.id === id)).length,
     habitIds: completedIds,
   };
+}
+
+// ── Target change history ─────────────────────────────────────────
+const TARGET_FIELDS = ['calorie_target', 'protein_target', 'carb_target', 'fat_target', 'water_target_liters'] as const;
+
+export function getTargetHistory(): TargetChangeEntry[] {
+  return getJSON<TargetChangeEntry[]>(KEYS.TARGET_HISTORY, []);
+}
+
+export function logTargetChange(
+  newTargets: Partial<UserProfile>,
+  source: 'coach' | 'manual' | 'onboarding',
+): void {
+  const current = getProfile();
+  const changes: Record<string, number | undefined> = {};
+  const previous: Record<string, number | undefined> = {};
+  let hasChange = false;
+
+  for (const field of TARGET_FIELDS) {
+    if (newTargets[field] != null && newTargets[field] !== current[field]) {
+      changes[field] = newTargets[field] as number;
+      previous[field] = current[field] as number | undefined;
+      hasChange = true;
+    }
+  }
+
+  if (!hasChange) return;
+
+  const history = getTargetHistory();
+  history.push({
+    timestamp: new Date().toISOString(),
+    source,
+    changes: changes as TargetChangeEntry['changes'],
+    previous: previous as TargetChangeEntry['previous'],
+  });
+  // Keep last 100 entries
+  if (history.length > 100) history.splice(0, history.length - 100);
+  setJSON(KEYS.TARGET_HISTORY, history);
 }

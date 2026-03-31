@@ -73,6 +73,16 @@ GARMIN/HEALTH DATA:
 - Body Battery: ${context.garminData.body_battery || "no data"}
 ` : "";
 
+    const targetHistorySummary = context?.targetHistory?.length ? `
+TARGET CHANGE HISTORY (most recent changes):
+${context.targetHistory.map((entry: any) => {
+  const date = new Date(entry.timestamp).toLocaleDateString();
+  const source = entry.source;
+  const changes = Object.entries(entry.changes || {}).map(([k, v]) => `${k}: ${entry.previous?.[k] ?? '?'} → ${v}`).join(', ');
+  return `- ${date} (${source}): ${changes}`;
+}).join('\n')}
+` : '';
+
     const supplementInfo = profile?.supplements?.length
       ? `\n- Supplements: ${profile.supplements.join(', ')}`
       : '';
@@ -92,7 +102,7 @@ TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
 ${profileSummary}${supplementInfo}${peptideInfo}${healthNotes}
 ${todaySummary}
 ${garminSummary}
-
+${targetHistorySummary}
 RULES:
 - Always consider their real-time intake data when giving advice
 - Be specific to THEIR situation — reference their actual numbers, not generic advice

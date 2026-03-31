@@ -65,10 +65,18 @@ export interface UserProfile {
   notify_midday?: string;    // "13:00"
   notify_evening?: string;   // "21:00"
   notify_weigh_in?: string;  // "07:00"
+  display_name?: string;
   email?: string;
   phone?: string;
   sms_opted_in?: boolean;
   created_at?: string;
+}
+
+export interface TargetChangeEntry {
+  timestamp: string;
+  source: 'coach' | 'manual' | 'onboarding';
+  changes: Partial<Pick<UserProfile, 'calorie_target' | 'protein_target' | 'carb_target' | 'fat_target' | 'water_target_liters'>>;
+  previous: Partial<Pick<UserProfile, 'calorie_target' | 'protein_target' | 'carb_target' | 'fat_target' | 'water_target_liters'>>;
 }
 
 export interface FoodEntry {

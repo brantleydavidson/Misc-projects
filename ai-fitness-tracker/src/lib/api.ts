@@ -71,7 +71,7 @@ export interface ChatResponse {
 export async function sendChat(
   messages: ChatMessage[],
   profile: UserProfile,
-  context?: { garminData?: unknown; todaySummary?: unknown }
+  context?: { garminData?: unknown; todaySummary?: unknown; targetHistory?: unknown }
 ): Promise<ChatResponse> {
   return post<ChatResponse>('chat', { messages, profile, context });
 }

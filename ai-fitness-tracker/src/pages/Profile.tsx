@@ -2,15 +2,15 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Dumbbell, Watch, Apple, ChevronRight, ChevronDown, RotateCcw, Loader2, Footprints, Flame, Heart, Moon,
   Zap, Activity, LogOut, Settings, Sparkles, Send, Scale, Ruler, Droplets, Clock, Calendar,
+  Cloud, CheckCircle, AlertCircle, Pencil, X, Check, User,
 } from 'lucide-react';
 import type { UserProfile, GarminData, ChatMessage } from '../types';
 import { calculateMacros, calculateWaterTarget, calculateTDEE, calculateBMR, getActivityMultiplier } from '../lib/calculations';
-import { getGarminData, saveGarminData, getDailySummary } from '../lib/storage';
+import { getGarminData, saveGarminData, getDailySummary, logTargetChange, getTargetHistory } from '../lib/storage';
 import { displayWeight, displayHeight, displayWaterTarget, getDefaultPreferences } from '../lib/units';
 import { sendChat } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { performFullSync } from '../lib/db';
-import { Cloud, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ProfileProps {
   profile: UserProfile;
@@ -42,6 +42,45 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
   const bmr = calculateBMR(profile);
   const { label: activityLabel } = getActivityMultiplier(profile);
   const water = calculateWaterTarget(profile);
+
+  // Active targets: prefer coach/manual overrides, fall back to calculated
+  const hasCustomTargets = !!(profile.calorie_target || profile.protein_target || profile.carb_target || profile.fat_target);
+  const activeTargets = {
+    calories: profile.calorie_target || macros.calories,
+    protein: profile.protein_target || macros.protein,
+    carbs: profile.carb_target || macros.carbs,
+    fat: profile.fat_target || macros.fat,
+    waterLiters: profile.water_target_liters || water,
+  };
+
+  // Inline target editing
+  const [editingTargets, setEditingTargets] = useState(false);
+  const [editTargetValues, setEditTargetValues] = useState({
+    calories: activeTargets.calories,
+    protein: activeTargets.protein,
+    carbs: activeTargets.carbs,
+    fat: activeTargets.fat,
+    water: profile.unit_water === 'ml'
+      ? Math.round(activeTargets.waterLiters * 1000)
+      : Math.round(activeTargets.waterLiters * 33.814),
+  });
+
+  function saveTargetEdits() {
+    const waterLiters = profile.unit_water === 'ml'
+      ? editTargetValues.water / 1000
+      : editTargetValues.water / 33.814;
+
+    const newTargets: Partial<UserProfile> = {
+      calorie_target: editTargetValues.calories,
+      protein_target: editTargetValues.protein,
+      carb_target: editTargetValues.carbs,
+      fat_target: editTargetValues.fat,
+      water_target_liters: Math.round(waterLiters * 100) / 100,
+    };
+    logTargetChange(newTargets, 'manual');
+    onUpdate(newTargets);
+    setEditingTargets(false);
+  }
 
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -135,7 +174,8 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
     try {
       const summary = getDailySummary();
       const garmin = getGarminData();
-      const response = await sendChat(updated, profile, { todaySummary: summary, garminData: garmin });
+      const targetHistory = getTargetHistory().slice(-10); // last 10 changes
+      const response = await sendChat(updated, profile, { todaySummary: summary, garminData: garmin, targetHistory });
       setCoachMessages(prev => [...prev, { role: 'assistant', content: response.message }]);
     } catch (err: any) {
       setCoachMessages(prev => [...prev, {
@@ -148,6 +188,7 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
   }
 
   function applyCoachUpdate(msgIndex: number, update: Partial<UserProfile>) {
+    logTargetChange(update, 'coach');
     onUpdate(update);
     setAppliedUpdates(prev => new Set(prev).add(msgIndex));
   }
@@ -161,9 +202,15 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
       {/* Header */}
       <div className="text-center py-3">
         <div className="w-16 h-16 mx-auto mb-2 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center">
-          <Dumbbell size={28} className="text-white" />
+          {profile.display_name ? (
+            <span className="text-2xl font-bold text-white">{profile.display_name.charAt(0).toUpperCase()}</span>
+          ) : (
+            <Dumbbell size={28} className="text-white" />
+          )}
         </div>
-        <h1 className="text-lg font-bold gradient-text font-display">JackedAI</h1>
+        <h1 className="text-lg font-bold gradient-text font-display">
+          {profile.display_name || 'JackedAI'}
+        </h1>
         <p className="text-xs text-slate-400">{user?.email || 'Your AI fitness protocol'}</p>
       </div>
 
@@ -180,27 +227,64 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
 
       {/* Daily Targets */}
       <div className="glass rounded-2xl p-4">
-        <h2 className="text-sm font-semibold text-white mb-3">Daily Targets</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-white">Daily Targets</h2>
+          <button
+            onClick={() => setEditingTargets(!editingTargets)}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition text-slate-400 hover:text-white"
+          >
+            {editingTargets ? <X size={14} /> : <Pencil size={14} />}
+          </button>
+        </div>
+
         <div className="space-y-2 text-sm">
           <Row label="BMR" value={`${Math.round(bmr)} cal`} />
           <Row label="Activity" value={activityLabel} />
           <Row label="TDEE" value={`${tdee} cal`} />
-          <Row label="Calorie Target" value={`${macros.calories} cal`} highlight />
-          <div className="border-t border-white/10 pt-2 mt-2 grid grid-cols-3 gap-3">
-            <div className="text-center">
-              <div className="text-lg font-bold text-neon-teal font-data">{macros.protein}g</div>
-              <div className="text-[10px] text-slate-400">Protein</div>
-            </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-neon-pink font-data">{macros.carbs}g</div>
-              <div className="text-[10px] text-slate-400">Carbs</div>
-            </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-neon-pink font-data">{macros.fat}g</div>
-              <div className="text-[10px] text-slate-400">Fat</div>
-            </div>
-          </div>
-          <Row label="Water" value={displayWaterTarget(water, profile)} />
+
+          {editingTargets ? (
+            <>
+              <div className="border-t border-white/10 pt-2 mt-2 space-y-3">
+                <TargetInput label="Calorie Target" unit="cal" value={editTargetValues.calories}
+                  onChange={v => setEditTargetValues(p => ({ ...p, calories: v }))} />
+                <TargetInput label="Protein" unit="g" value={editTargetValues.protein}
+                  onChange={v => setEditTargetValues(p => ({ ...p, protein: v }))} />
+                <TargetInput label="Carbs" unit="g" value={editTargetValues.carbs}
+                  onChange={v => setEditTargetValues(p => ({ ...p, carbs: v }))} />
+                <TargetInput label="Fat" unit="g" value={editTargetValues.fat}
+                  onChange={v => setEditTargetValues(p => ({ ...p, fat: v }))} />
+                <TargetInput label="Water" unit={profile.unit_water === 'ml' ? 'ml' : 'oz'} value={editTargetValues.water}
+                  onChange={v => setEditTargetValues(p => ({ ...p, water: v }))} />
+              </div>
+              <button onClick={saveTargetEdits}
+                className="w-full mt-3 py-2 rounded-xl bg-neon-teal/10 border border-neon-teal/30 text-neon-teal text-xs font-semibold hover:bg-neon-teal/20 transition flex items-center justify-center gap-1.5"
+              >
+                <Check size={12} /> Save Targets
+              </button>
+            </>
+          ) : (
+            <>
+              <Row label="Calorie Target" value={`${activeTargets.calories} cal`} highlight />
+              <div className="border-t border-white/10 pt-2 mt-2 grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-neon-teal font-data">{activeTargets.protein}g</div>
+                  <div className="text-[10px] text-slate-400">Protein</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-neon-pink font-data">{activeTargets.carbs}g</div>
+                  <div className="text-[10px] text-slate-400">Carbs</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-neon-pink font-data">{activeTargets.fat}g</div>
+                  <div className="text-[10px] text-slate-400">Fat</div>
+                </div>
+              </div>
+              <Row label="Water" value={displayWaterTarget(activeTargets.waterLiters, profile)} />
+              {hasCustomTargets && (
+                <p className="text-[10px] text-slate-500 mt-1 italic">Custom targets set — talk to Coach to recalculate</p>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -478,38 +562,6 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
               </div>
             </div>
 
-            {/* SMS Notifications */}
-            <div>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">SMS Reminders</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 block">Phone Number</label>
-                  <input
-                    type="tel"
-                    value={profile.phone || ''}
-                    onChange={e => onUpdate({ phone: e.target.value })}
-                    placeholder="+1 (555) 123-4567"
-                    className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm text-slate-300">Enable SMS Reminders</span>
-                    <p className="text-[10px] text-slate-500">Weigh-in reminders & missed check-in nudges</p>
-                  </div>
-                  <button
-                    onClick={() => onUpdate({ sms_opted_in: !profile.sms_opted_in })}
-                    className={`w-11 h-6 rounded-full transition-colors relative ${
-                      profile.sms_opted_in ? 'bg-neon-teal' : 'bg-white/10'
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${
-                      profile.sms_opted_in ? 'left-5.5' : 'left-0.5'
-                    }`} />
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -624,46 +676,125 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         )}
       </div>
 
-      {/* Account & Sync */}
-      <div className="glass rounded-2xl p-4">
-        <h2 className="text-sm font-semibold text-white mb-2">Account & Data</h2>
-        {user && <p className="text-xs text-slate-400 mb-3">{user.email}</p>}
-
-        {/* Sync to Cloud */}
-        <button
-          onClick={async () => {
-            setSyncing(true);
-            setSyncResult(null);
-            const result = await performFullSync();
-            setSyncing(false);
-            setSyncResult(result.synced
-              ? { ok: true, msg: 'All data synced to cloud' }
-              : { ok: false, msg: result.error || 'Sync failed' }
-            );
-            setTimeout(() => setSyncResult(null), 4000);
-          }}
-          disabled={syncing}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-ui
-            bg-neon-teal/10 border border-neon-teal/30 text-neon-teal hover:bg-neon-teal/20
-            disabled:opacity-50 transition mb-3"
+      {/* Account */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <button onClick={() => toggle('account')}
+          className="w-full flex items-center justify-between p-4"
         >
-          {syncing ? <Loader2 size={14} className="animate-spin" /> : <Cloud size={14} />}
-          {syncing ? 'Syncing...' : 'Sync All Data to Cloud'}
+          <div className="flex items-center gap-2">
+            <User size={16} className="text-neon-teal" />
+            <span className="text-sm font-semibold text-white">Account</span>
+          </div>
+          <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'account' ? 'rotate-180' : ''}`} />
         </button>
 
-        {syncResult && (
-          <div className={`flex items-center gap-2 text-xs mb-3 ${syncResult.ok ? 'text-green-400' : 'text-neon-pink'}`}>
-            {syncResult.ok ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-            {syncResult.msg}
-          </div>
-        )}
+        {expandedSection === 'account' && (
+          <div className="border-t border-white/10 p-4 space-y-4">
+            {/* Display Name */}
+            <div>
+              <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 block">Display Name</label>
+              <input
+                type="text"
+                value={profile.display_name || ''}
+                onChange={e => onUpdate({ display_name: e.target.value })}
+                placeholder="Your name"
+                className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none"
+              />
+            </div>
 
-        {user && (
-          <button onClick={signOut}
-            className="flex items-center gap-2 text-xs text-neon-pink hover:text-neon-pink/80 transition"
-          >
-            <LogOut size={14} /> Sign Out
-          </button>
+            {/* Email (read-only if from Google OAuth) */}
+            <div>
+              <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 block">Email</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="email"
+                  value={user?.email || profile.email || ''}
+                  readOnly={!!user}
+                  onChange={e => !user && onUpdate({ email: e.target.value })}
+                  placeholder="your@email.com"
+                  className={`flex-1 bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none ${user ? 'opacity-60' : ''}`}
+                />
+                {user && (
+                  <span className="text-[10px] text-slate-500 whitespace-nowrap flex items-center gap-1">
+                    <CheckCircle size={10} className="text-green-400" /> Google
+                  </span>
+                )}
+              </div>
+              {user && <p className="text-[10px] text-slate-500 mt-1">Signed in via Google — email managed by your Google account</p>}
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 block">Phone Number</label>
+              <input
+                type="tel"
+                value={profile.phone || ''}
+                onChange={e => onUpdate({ phone: e.target.value })}
+                placeholder="+1 (555) 123-4567"
+                className="w-full bg-white/5 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 border border-white/10 focus:border-neon-teal focus:outline-none"
+              />
+            </div>
+
+            {/* SMS Toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm text-slate-300">SMS Reminders</span>
+                <p className="text-[10px] text-slate-500">Weigh-in reminders & missed check-in nudges</p>
+              </div>
+              <button
+                onClick={() => onUpdate({ sms_opted_in: !profile.sms_opted_in })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  profile.sms_opted_in ? 'bg-neon-teal' : 'bg-white/10'
+                }`}
+              >
+                <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${
+                  profile.sms_opted_in ? 'left-5.5' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+
+            {/* Sync to Cloud */}
+            <div className="border-t border-white/10 pt-4">
+              <button
+                onClick={async () => {
+                  setSyncing(true);
+                  setSyncResult(null);
+                  const result = await performFullSync();
+                  setSyncing(false);
+                  setSyncResult(result.synced
+                    ? { ok: true, msg: 'All data synced to cloud' }
+                    : { ok: false, msg: result.error || 'Sync failed' }
+                  );
+                  setTimeout(() => setSyncResult(null), 4000);
+                }}
+                disabled={syncing}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-ui
+                  bg-neon-teal/10 border border-neon-teal/30 text-neon-teal hover:bg-neon-teal/20
+                  disabled:opacity-50 transition"
+              >
+                {syncing ? <Loader2 size={14} className="animate-spin" /> : <Cloud size={14} />}
+                {syncing ? 'Syncing...' : 'Sync All Data to Cloud'}
+              </button>
+              {syncResult && (
+                <div className={`flex items-center gap-2 text-xs mt-2 ${syncResult.ok ? 'text-green-400' : 'text-neon-pink'}`}>
+                  {syncResult.ok ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                  {syncResult.msg}
+                </div>
+              )}
+            </div>
+
+            {/* Sign Out */}
+            {user && (
+              <div className="border-t border-white/10 pt-4">
+                <button onClick={signOut}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm
+                    bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition"
+                >
+                  <LogOut size={14} /> Sign Out
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -770,6 +901,26 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="text-center p-1.5 rounded-lg bg-white/5">
       <div className="text-xs font-bold text-white font-data">{value}</div>
       <div className="text-[9px] text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function TargetInput({ label, unit, value, onChange }: {
+  label: string; unit: string; value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-slate-300 flex-shrink-0">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          value={value}
+          onChange={e => onChange(Math.round(Number(e.target.value)))}
+          className="w-20 bg-white/5 rounded-lg px-2 py-1.5 text-sm text-white text-right border border-white/10 focus:border-neon-teal focus:outline-none font-data"
+        />
+        <span className="text-xs text-slate-500 w-6">{unit}</span>
+      </div>
     </div>
   );
 }
