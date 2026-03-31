@@ -1,13 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap, PenLine, ScanBarcode } from 'lucide-react';
-import { analyzeFoodChat, lookupNutrition, lookupBarcode } from '../lib/api';
+import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap, PenLine, ScanBarcode, User } from 'lucide-react';
+import { analyzeFoodChat, lookupNutrition, lookupBarcode, analyzeBodyProgress } from '../lib/api';
 import type { FoodMessage, FoodData, NutritionResult, BarcodeResult } from '../lib/api';
-import { addFoodEntry } from '../lib/storage';
+import { addFoodEntry, addBodyPhoto, getBodyPhotos, getBodyPhotoDates, getAllBodyPhotos } from '../lib/storage';
 import { getFoodMemoryContext, addCorrection, learnFood, bumpFoodFrequency } from '../lib/food-memory';
-import type { FoodEntry } from '../types';
+import type { FoodEntry, BodyPhoto } from '../types';
 
-type Mode = 'choose' | 'camera' | 'preview' | 'conversation' | 'manual' | 'barcode';
+type Mode = 'choose' | 'camera' | 'preview' | 'conversation' | 'manual' | 'barcode' | 'progress';
 
 /** Safely parse a number — returns 0 for NaN/undefined/null */
 function safeNum(val: unknown): number {
@@ -80,6 +80,61 @@ export function SnapFood() {
   const html5QrCodeRef = useRef<any>(null);
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [barcodeResult, setBarcodeResult] = useState<BarcodeResult | null>(null);
+
+  // Progress photo state
+  const progressInputRef = useRef<HTMLInputElement>(null);
+  const [progressPhotos, setProgressPhotos] = useState<BodyPhoto[]>(getBodyPhotos());
+  const [progressAngle, setProgressAngle] = useState<'front' | 'side' | 'back'>('front');
+  const [progressAnalyzing, setProgressAnalyzing] = useState(false);
+  const [progressAnalysis, setProgressAnalysis] = useState<string | null>(null);
+
+  function handleProgressPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      addBodyPhoto({
+        angle: progressAngle,
+        image_base64: base64,
+        date: new Date().toISOString().split('T')[0],
+      });
+      setProgressPhotos(getBodyPhotos());
+      if (progressAngle === 'front') setProgressAngle('side');
+      else if (progressAngle === 'side') setProgressAngle('back');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  async function handleProgressAnalysis() {
+    if (progressPhotos.length === 0) return;
+    setProgressAnalyzing(true);
+    setProgressAnalysis(null);
+    try {
+      const allDates = getBodyPhotoDates();
+      const today = new Date().toISOString().split('T')[0];
+      const previousDates = allDates.filter(d => d < today);
+      const previousDate = previousDates[previousDates.length - 1];
+      const allPhotos = getAllBodyPhotos();
+      const previousPhotos = previousDate ? allPhotos[previousDate] : [];
+      const currentFront = progressPhotos.find(p => p.angle === 'front');
+      const previousFront = previousPhotos?.find((p: BodyPhoto) => p.angle === 'front');
+
+      const result = await analyzeBodyProgress({
+        current_photo: currentFront?.image_base64 || progressPhotos[0].image_base64,
+        previous_photo: previousFront?.image_base64,
+        current_date: today,
+        previous_date: previousDate,
+        current_weight_kg: previousFront?.weight_kg,
+      });
+      setProgressAnalysis(result.analysis);
+    } catch (err: any) {
+      setProgressAnalysis(`Couldn't analyze: ${err.message}`);
+    } finally {
+      setProgressAnalyzing(false);
+    }
+  }
 
   // Auto-detect meal type from time of day
   useEffect(() => {
@@ -404,9 +459,9 @@ export function SnapFood() {
           <X size={24} />
         </button>
         <h1 className="text-lg font-bold gradient-text">
-          {mode === 'manual' ? 'Manual Entry' : mode === 'barcode' ? 'Scan Barcode' : 'Snap Food'}
+          {mode === 'manual' ? 'Manual Entry' : mode === 'barcode' ? 'Scan Barcode' : mode === 'progress' ? 'Progress Photos' : 'Snap Food'}
         </h1>
-        {(mode === 'conversation' || mode === 'manual' || mode === 'barcode') ? (
+        {(mode === 'conversation' || mode === 'manual' || mode === 'barcode' || mode === 'progress') ? (
           <button onClick={reset} className="text-slate-400"><RotateCcw size={20} /></button>
         ) : (
           <div className="w-6" />
@@ -453,24 +508,30 @@ export function SnapFood() {
             <span className="text-slate-500 text-xs">AI identifies food + estimates macros</span>
           </button>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-2">
             <button onClick={() => fileInputRef.current?.click()}
-              className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+              className="py-5 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
             >
-              <Image size={20} className="text-neon-pink" />
-              <span className="text-slate-300 text-sm">Gallery</span>
+              <Image size={18} className="text-neon-pink" />
+              <span className="text-slate-300 text-[11px]">Gallery</span>
             </button>
             <button onClick={startBarcodeScanner}
-              className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+              className="py-5 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
             >
-              <ScanBarcode size={20} className="text-yellow-400" />
-              <span className="text-slate-300 text-sm">Barcode</span>
+              <ScanBarcode size={18} className="text-yellow-400" />
+              <span className="text-slate-300 text-[11px]">Barcode</span>
             </button>
             <button onClick={() => setMode('manual')}
-              className="py-6 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+              className="py-5 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
             >
-              <PenLine size={20} className="text-neon-teal" />
-              <span className="text-slate-300 text-sm">Type It In</span>
+              <PenLine size={18} className="text-neon-teal" />
+              <span className="text-slate-300 text-[11px]">Type It In</span>
+            </button>
+            <button onClick={() => setMode('progress')}
+              className="py-5 rounded-2xl glass flex flex-col items-center gap-2 hover:bg-white/10 transition"
+            >
+              <User size={18} className="text-purple-400" />
+              <span className="text-slate-300 text-[11px]">Progress</span>
             </button>
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
@@ -608,6 +669,92 @@ export function SnapFood() {
       )}
 
       {/* Conversation mode */}
+      {/* Progress photo mode */}
+      {mode === 'progress' && (
+        <div className="px-4 space-y-4 flex-1 pb-24 overflow-y-auto">
+          {/* Angle selector */}
+          <div className="flex gap-2">
+            {(['front', 'side', 'back'] as const).map(angle => {
+              const hasPhoto = progressPhotos.some(p => p.angle === angle);
+              return (
+                <button key={angle} onClick={() => setProgressAngle(angle)}
+                  className={`flex-1 py-2.5 rounded-xl text-xs capitalize transition font-medium ${
+                    progressAngle === angle
+                      ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
+                      : hasPhoto
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                        : 'bg-white/5 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  {hasPhoto && <Check size={10} className="inline mr-1" />}
+                  {angle}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Photo grid */}
+          {progressPhotos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {progressPhotos.map(photo => (
+                <div key={photo.id} className="relative rounded-xl overflow-hidden aspect-[3/4] bg-white/5">
+                  <img
+                    src={`data:image/jpeg;base64,${photo.image_base64}`}
+                    alt={photo.angle}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 px-2 py-1">
+                    <span className="text-[10px] text-white capitalize font-medium">{photo.angle}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Capture button */}
+          <button onClick={() => progressInputRef.current?.click()}
+            className="w-full py-10 rounded-2xl border-2 border-dashed border-purple-500/40 bg-purple-500/5 flex flex-col items-center gap-3 hover:bg-purple-500/10 transition"
+          >
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-neon-pink flex items-center justify-center">
+              <Camera size={20} className="text-white" />
+            </div>
+            <span className="text-white font-medium">
+              {progressPhotos.some(p => p.angle === progressAngle)
+                ? `Retake ${progressAngle} photo`
+                : `Take ${progressAngle} photo`}
+            </span>
+            <span className="text-slate-500 text-xs">Same pose, same lighting for best comparison</span>
+          </button>
+          <input ref={progressInputRef} type="file" accept="image/*" capture="user" onChange={handleProgressPhoto} className="hidden" />
+
+          {/* AI Analysis */}
+          {progressPhotos.length > 0 && (
+            <button onClick={handleProgressAnalysis} disabled={progressAnalyzing}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500/20 to-neon-teal/20 border border-purple-500/20 text-white text-sm font-medium flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+            >
+              {progressAnalyzing ? (
+                <><Loader2 size={14} className="animate-spin" /> Analyzing...</>
+              ) : (
+                <><Zap size={14} /> AI Progress Analysis</>
+              )}
+            </button>
+          )}
+
+          {progressAnalysis && (
+            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+              <div className="text-[10px] text-purple-400 font-semibold uppercase tracking-wider mb-2">APEX Analysis</div>
+              <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{progressAnalysis}</div>
+            </div>
+          )}
+
+          {progressPhotos.length === 0 && (
+            <p className="text-[10px] text-slate-500 text-center px-4">
+              Take front, side, and back photos consistently for AI-powered progress tracking over time.
+            </p>
+          )}
+        </div>
+      )}
+
       {mode === 'conversation' && (
         <>
           {/* Photo thumbnail */}

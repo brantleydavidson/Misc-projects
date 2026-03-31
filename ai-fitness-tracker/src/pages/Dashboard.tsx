@@ -3,12 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Camera, Droplets, Flame, Footprints, Heart, Moon, Zap,
   Sun, Sunset, ChevronRight, ChevronLeft, Bell, BellOff, Dumbbell, Activity,
-  Battery, Brain, Check,
+  Battery, Brain, Check, User, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
-import type { UserProfile } from '../types';
-import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus } from '../lib/storage';
+import type { UserProfile, BodyPhoto } from '../types';
+import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus, getBodyPhotoDates, getAllBodyPhotos } from '../lib/storage';
 import { displayWater, displayWaterTarget, waterIncrements, displayWeight } from '../lib/units';
 import {
   getCurrentCheckInPeriod, getCheckInNudge,
@@ -379,6 +379,9 @@ export function Dashboard({ profile }: DashboardProps) {
         )}
       </div>
 
+      {/* Progress Insights */}
+      <ProgressInsights navigate={navigate} />
+
       {/* Quick Actions */}
       <div className="flex gap-3">
         <button onClick={() => navigate(currentDay ? '/snap' : `/snap?date=${dateKey}`)}
@@ -402,6 +405,129 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
       <div className={`flex justify-center mb-1 ${color}`}>{icon}</div>
       <div className="text-sm font-bold text-white">{value}</div>
       <div className="text-[10px] text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function ProgressInsights({ navigate }: { navigate: (path: string) => void }) {
+  const photoDates = getBodyPhotoDates();
+  const allPhotos = getAllBodyPhotos();
+
+  // Get weight history from activity logs for trend
+  const weightHistory: { date: string; kg: number }[] = [];
+  for (let i = 30; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split('T')[0];
+    const activity = getActivityData(key);
+    if (activity.weight_kg) {
+      weightHistory.push({ date: key, kg: activity.weight_kg });
+    }
+  }
+
+  const hasPhotos = photoDates.length > 0;
+  const hasWeightData = weightHistory.length >= 2;
+  const latestWeight = weightHistory[weightHistory.length - 1];
+  const firstWeight = weightHistory[0];
+  const weightChange = hasWeightData ? latestWeight.kg - firstWeight.kg : 0;
+
+  // Get most recent and earliest photos for comparison
+  const latestPhotoDate = photoDates[photoDates.length - 1];
+  const earliestPhotoDate = photoDates.length > 1 ? photoDates[0] : null;
+  const latestPhotos = latestPhotoDate ? allPhotos[latestPhotoDate] : [];
+  const earliestPhotos = earliestPhotoDate ? allPhotos[earliestPhotoDate] : [];
+
+  if (!hasPhotos && !hasWeightData) {
+    // Empty state — prompt to take first photo
+    return (
+      <button onClick={() => navigate('/snap')}
+        className="w-full glass rounded-2xl p-4 flex items-center gap-4 hover:bg-white/5 transition"
+      >
+        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+          <User size={20} className="text-purple-400" />
+        </div>
+        <div className="flex-1 text-left">
+          <div className="text-sm font-semibold text-white">Track Your Progress</div>
+          <div className="text-[10px] text-slate-400">Take your first progress photos for AI body composition analysis</div>
+        </div>
+        <ChevronRight size={16} className="text-slate-500" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="glass rounded-2xl p-4 space-y-3">
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <User size={16} className="text-purple-400" />
+          Progress
+        </h2>
+        <button onClick={() => navigate('/snap')}
+          className="text-[10px] text-purple-400 flex items-center gap-1"
+        >
+          New Photos <ChevronRight size={12} />
+        </button>
+      </div>
+
+      {/* Weight trend */}
+      {hasWeightData && (
+        <div className="flex items-center gap-3 py-2 px-3 rounded-xl bg-white/5">
+          {weightChange <= 0 ? (
+            <TrendingDown size={18} className="text-green-400" />
+          ) : (
+            <TrendingUp size={18} className="text-orange-400" />
+          )}
+          <div className="flex-1">
+            <div className="text-xs text-white font-data">
+              {latestWeight.kg.toFixed(1)} kg
+              <span className={`ml-2 text-[10px] ${weightChange <= 0 ? 'text-green-400' : 'text-orange-400'}`}>
+                {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} kg
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-500">
+              {weightHistory.length} weigh-ins over {Math.round((new Date(latestWeight.date).getTime() - new Date(firstWeight.date).getTime()) / 86400000)} days
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo comparison */}
+      {hasPhotos && (
+        <div className="flex gap-2">
+          {earliestPhotos.length > 0 && (
+            <div className="flex-1">
+              <div className="text-[9px] text-slate-500 mb-1 text-center">
+                {new Date(earliestPhotoDate! + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
+              <div className="rounded-xl overflow-hidden aspect-[3/4] bg-white/5">
+                <img
+                  src={`data:image/jpeg;base64,${(earliestPhotos.find((p: BodyPhoto) => p.angle === 'front') || earliestPhotos[0]).image_base64}`}
+                  alt="Before"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+          )}
+          <div className={earliestPhotos.length > 0 ? 'flex-1' : 'w-full'}>
+            <div className="text-[9px] text-slate-500 mb-1 text-center">
+              {earliestPhotos.length > 0 ? 'Latest' : new Date(latestPhotoDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </div>
+            <div className={`rounded-xl overflow-hidden bg-white/5 ${earliestPhotos.length > 0 ? 'aspect-[3/4]' : 'aspect-[4/3]'}`}>
+              <img
+                src={`data:image/jpeg;base64,${(latestPhotos.find((p: BodyPhoto) => p.angle === 'front') || latestPhotos[0]).image_base64}`}
+                alt="Current"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasPhotos && photoDates.length > 1 && (
+        <div className="text-[10px] text-slate-500 text-center">
+          {photoDates.length} photo sessions tracked
+        </div>
+      )}
     </div>
   );
 }
