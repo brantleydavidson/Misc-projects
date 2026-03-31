@@ -238,3 +238,34 @@ export async function sendEmail(
   const deviceId = localStorage.getItem('macrosnap_device_id') || '';
   return post<{ sent: boolean }>('send-email', { to, template, data, device_id: deviceId });
 }
+
+// ── Eat Out / Restaurant ───────────────────────────────────────────
+
+export interface Restaurant {
+  place_id: string;
+  name: string;
+  address: string;
+  rating: number | null;
+  price_level: number | null;
+  open_now: boolean | null;
+  types: string[];
+  lat: number;
+  lng: number;
+}
+
+export async function searchNearbyRestaurants(
+  lat: number, lng: number, query?: string
+): Promise<{ restaurants: Restaurant[] }> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<{ restaurants: Restaurant[] }>('nearby-restaurants', { lat, lng, query, deviceId });
+}
+
+export async function getMealAdvice(
+  restaurant: Restaurant | { name: string },
+  profile: UserProfile,
+  todaySummary: unknown,
+  messages: ChatMessage[],
+): Promise<ChatResponse> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<ChatResponse>('meal-advisor', { restaurant, profile, todaySummary, messages, deviceId });
+}

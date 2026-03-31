@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Camera, Droplets, Flame, Footprints, Heart, Moon, Zap,
   Sun, Sunset, ChevronRight, ChevronLeft, Bell, BellOff, Dumbbell, Activity,
-  Battery, Brain, Check, User, TrendingDown, TrendingUp,
+  Battery, Brain, Check, User, TrendingDown, TrendingUp, UtensilsCrossed,
 } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
@@ -386,16 +386,26 @@ export function Dashboard({ profile }: DashboardProps) {
       <HabitWidget navigate={navigate} dateKey={dateKey} />
 
       {/* Quick Actions */}
-      <div className="flex gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <button onClick={() => navigate(currentDay ? '/snap' : `/snap?date=${dateKey}`)}
-          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal/20 to-neon-pink/20 border border-neon-teal/30 text-white text-sm font-medium flex items-center justify-center gap-2"
+          className="py-3 rounded-xl bg-gradient-to-r from-neon-teal/20 to-neon-pink/20 border border-neon-teal/30 text-white text-sm font-medium flex items-center justify-center gap-2"
         >
           <Camera size={16} /> {currentDay ? 'Snap Food' : 'Add Food'}
         </button>
+        <button onClick={() => navigate('/eat-out')}
+          className="py-3 rounded-xl bg-gradient-to-r from-orange-500/20 to-neon-pink/20 border border-orange-500/30 text-white text-sm font-medium flex items-center justify-center gap-2"
+        >
+          <UtensilsCrossed size={16} /> Eat Out
+        </button>
         <button onClick={() => navigate('/chat')}
-          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-pink/20 to-neon-pink/20 border border-neon-pink/30 text-white text-sm font-medium flex items-center justify-center gap-2"
+          className="py-3 rounded-xl bg-gradient-to-r from-neon-pink/20 to-neon-pink/20 border border-neon-pink/30 text-white text-sm font-medium flex items-center justify-center gap-2"
         >
           <Zap size={16} /> Ask Coach
+        </button>
+        <button onClick={() => navigate('/trends')}
+          className="py-3 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-sm font-medium flex items-center justify-center gap-2"
+        >
+          <TrendingUp size={16} /> Trends
         </button>
       </div>
     </div>
