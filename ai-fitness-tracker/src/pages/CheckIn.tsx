@@ -10,6 +10,7 @@ import type { GarminData, WorkoutEntry, BodyPhoto, UserProfile } from '../types'
 import {
   getActivityData, saveActivityData, markCheckIn, getCheckInStatus,
   addWorkout, removeWorkout, getBodyPhotos, addBodyPhoto, getBodyPhotoDates, getAllBodyPhotos,
+  clearActivityData, moveActivityFields,
 } from '../lib/storage';
 import { analyzeBodyProgress } from '../lib/api';
 import {
@@ -237,6 +238,7 @@ export function CheckIn({ profile }: CheckInProps) {
 
   const periods: Period[] = ['morning', 'midday', 'evening'];
   const config = PERIOD_CONFIG[activePeriod];
+  const hasAnyData = Object.values(formData).some(v => v != null);
 
   return (
     <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
@@ -370,6 +372,44 @@ export function CheckIn({ profile }: CheckInProps) {
         >
           {saved ? '✓ Saved!' : checkIns[activePeriod] ? 'Update Check-in' : 'Save Check-in'}
         </button>
+
+        {/* Clear / Move data */}
+        {hasAnyData && (
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => {
+              const fieldKeys = config.fields.map(f => f.key);
+              // Clear this period's fields for this date
+              const log = getActivityData(dateParam);
+              const cleaned: Partial<GarminData> = { ...log };
+              fieldKeys.forEach(k => delete (cleaned as any)[k]);
+              // Save cleaned version (overwrite by clearing the activity log for this date then re-saving)
+              clearActivityData(dateParam);
+              if (Object.keys(cleaned).length > 1) saveActivityData(cleaned, dateParam);
+              setActivityData(getActivityData(dateParam));
+              setFormData({});
+              setSaved(false);
+            }}
+              className="flex-1 py-2 rounded-lg border border-red-500/30 text-red-400 text-xs hover:bg-red-500/10 transition"
+            >
+              <Trash2 size={12} className="inline mr-1" /> Clear {activePeriod} data
+            </button>
+            <button onClick={() => {
+              const fieldKeys = config.fields.map(f => f.key);
+              const d = new Date(selectedDate);
+              d.setDate(d.getDate() - 1);
+              const yesterdayKey = dateToKey(d);
+              const fromKey = dateParam || dateToKey(new Date());
+              moveActivityFields(fromKey, yesterdayKey, fieldKeys);
+              setActivityData(getActivityData(dateParam));
+              setFormData({});
+              setSaved(false);
+            }}
+              className="flex-1 py-2 rounded-lg border border-neon-teal/30 text-neon-teal text-xs hover:bg-neon-teal/10 transition"
+            >
+              Move to prev day
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Body Progress Photos (morning check-in) */}
