@@ -233,24 +233,35 @@ export async function performFullSync(): Promise<{ synced: boolean; error?: stri
       await upsertProfile(localProfile);
     }
 
-    // Sync today's food
-    const today = new Date().toISOString().split('T')[0];
+    // Sync ALL food entries (every date that has data)
     const foodLog = JSON.parse(localStorage.getItem('macrosnap_food_log') || '{}');
-    if (foodLog[today]) {
-      await syncFoodEntries(today, foodLog[today]);
+    const foodDates = Object.keys(foodLog);
+    for (const date of foodDates) {
+      if (foodLog[date]?.length > 0) {
+        await syncFoodEntries(date, foodLog[date]);
+      }
     }
 
-    // Sync today's activity
+    // Sync ALL activity data (every date)
     const activityLog = JSON.parse(localStorage.getItem('macrosnap_activity_log') || '{}');
-    if (activityLog[today]) {
-      await syncActivityData(today, activityLog[today]);
+    const activityDates = Object.keys(activityLog);
+    for (const date of activityDates) {
+      if (activityLog[date] && Object.keys(activityLog[date]).length > 0) {
+        await syncActivityData(date, activityLog[date]);
+      }
     }
 
-    // Sync water
+    // Sync ALL water data (every date)
     const waterLog = JSON.parse(localStorage.getItem('macrosnap_water_log') || '{}');
-    if (waterLog[today] != null) {
-      await syncWater(today, waterLog[today]);
+    const waterDates = Object.keys(waterLog);
+    for (const date of waterDates) {
+      if (waterLog[date] != null) {
+        await syncWater(date, waterLog[date]);
+      }
     }
+
+    // Mark last full sync time
+    localStorage.setItem('jackedai_last_sync', new Date().toISOString());
 
     return { synced: true };
   } catch (err: any) {
