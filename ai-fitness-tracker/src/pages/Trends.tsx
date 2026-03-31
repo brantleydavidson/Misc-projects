@@ -78,7 +78,7 @@ export function Trends({ profile }: TrendsProps) {
                 : 'glass text-slate-400 border border-white/5'
             }`}
           >
-            {r}D
+            {r} days
           </button>
         ))}
       </div>
