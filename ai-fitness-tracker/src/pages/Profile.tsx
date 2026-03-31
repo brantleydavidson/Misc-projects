@@ -9,6 +9,8 @@ import { getGarminData, saveGarminData, getDailySummary } from '../lib/storage';
 import { displayWeight, displayHeight, displayWaterTarget, getDefaultPreferences } from '../lib/units';
 import { sendChat } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { performFullSync } from '../lib/db';
+import { Cloud, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ProfileProps {
   profile: UserProfile;
@@ -40,6 +42,9 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
   const bmr = calculateBMR(profile);
   const { label: activityLabel } = getActivityMultiplier(profile);
   const water = calculateWaterTarget(profile);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const [garminData, setGarminData] = useState<GarminData | null>(getGarminData());
   const [garminConnecting, setGarminConnecting] = useState(false);
@@ -619,18 +624,48 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         )}
       </div>
 
-      {/* Account */}
-      {user && (
-        <div className="glass rounded-2xl p-4">
-          <h2 className="text-sm font-semibold text-white mb-2">Account</h2>
-          <p className="text-xs text-slate-400 mb-3">{user.email}</p>
+      {/* Account & Sync */}
+      <div className="glass rounded-2xl p-4">
+        <h2 className="text-sm font-semibold text-white mb-2">Account & Data</h2>
+        {user && <p className="text-xs text-slate-400 mb-3">{user.email}</p>}
+
+        {/* Sync to Cloud */}
+        <button
+          onClick={async () => {
+            setSyncing(true);
+            setSyncResult(null);
+            const result = await performFullSync();
+            setSyncing(false);
+            setSyncResult(result.synced
+              ? { ok: true, msg: 'All data synced to cloud' }
+              : { ok: false, msg: result.error || 'Sync failed' }
+            );
+            setTimeout(() => setSyncResult(null), 4000);
+          }}
+          disabled={syncing}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-ui
+            bg-neon-teal/10 border border-neon-teal/30 text-neon-teal hover:bg-neon-teal/20
+            disabled:opacity-50 transition mb-3"
+        >
+          {syncing ? <Loader2 size={14} className="animate-spin" /> : <Cloud size={14} />}
+          {syncing ? 'Syncing...' : 'Sync All Data to Cloud'}
+        </button>
+
+        {syncResult && (
+          <div className={`flex items-center gap-2 text-xs mb-3 ${syncResult.ok ? 'text-green-400' : 'text-neon-pink'}`}>
+            {syncResult.ok ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+            {syncResult.msg}
+          </div>
+        )}
+
+        {user && (
           <button onClick={signOut}
             className="flex items-center gap-2 text-xs text-neon-pink hover:text-neon-pink/80 transition"
           >
             <LogOut size={14} /> Sign Out
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Actions */}
       <button onClick={onResetOnboarding}
