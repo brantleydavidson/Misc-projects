@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Camera, X, Image, RotateCcw, Check, Loader2, Send, Zap, PenLine, ScanBarcode } from 'lucide-react';
 import { analyzeFoodChat, lookupNutrition, lookupBarcode } from '../lib/api';
 import type { FoodMessage, FoodData, NutritionResult, BarcodeResult } from '../lib/api';
@@ -43,6 +43,8 @@ function sanitizeFoodData(raw: FoodData | null): FoodData | null {
 
 export function SnapFood() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get('date') || undefined; // YYYY-MM-DD or undefined (today)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -346,8 +348,8 @@ export function SnapFood() {
       ai_analysis: data.ai_analysis,
       confidence: data.confidence,
       image_base64: imageData || undefined,
-    });
-    navigate('/');
+    }, dateParam);
+    navigate(dateParam ? `/?date=${dateParam}` : '/');
   };
 
   // Manual food entry
@@ -398,7 +400,7 @@ export function SnapFood() {
     <div className="min-h-screen bg-deep-navy flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
-        <button onClick={() => { stopCamera(); stopBarcodeScanner(); navigate('/'); }} className="text-slate-400">
+        <button onClick={() => { stopCamera(); stopBarcodeScanner(); navigate(dateParam ? `/?date=${dateParam}` : '/'); }} className="text-slate-400">
           <X size={24} />
         </button>
         <h1 className="text-lg font-bold gradient-text">
@@ -410,6 +412,13 @@ export function SnapFood() {
           <div className="w-6" />
         )}
       </div>
+
+      {/* Past day indicator */}
+      {dateParam && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs text-center flex-shrink-0">
+          Logging to {new Date(dateParam + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+        </div>
+      )}
 
       {/* Meal type selector */}
       <div className="flex gap-2 px-4 mb-4 flex-shrink-0">

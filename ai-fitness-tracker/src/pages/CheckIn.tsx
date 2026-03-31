@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Sun, Moon, Sunset, Check, Plus, X, Trash2,
   Footprints, Heart, Flame, Zap, Activity, Scale,
@@ -76,10 +76,12 @@ const WORKOUT_TYPES = [
 
 export function CheckIn() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get('date') || undefined;
   const currentPeriod = getCurrentCheckInPeriod();
   const [activePeriod, setActivePeriod] = useState<Period>(currentPeriod || 'morning');
-  const [activityData, setActivityData] = useState<GarminData>(getActivityData());
-  const [checkIns, setCheckIns] = useState(getCheckInStatus());
+  const [activityData, setActivityData] = useState<GarminData>(getActivityData(dateParam));
+  const [checkIns, setCheckIns] = useState(getCheckInStatus(dateParam));
   const [formData, setFormData] = useState<Record<string, number | undefined>>({});
   const [showWorkoutForm, setShowWorkoutForm] = useState(false);
   const [workout, setWorkout] = useState<Partial<WorkoutEntry>>({ type: 'Strength', duration_minutes: 45 });
@@ -87,7 +89,7 @@ export function CheckIn() {
 
   // Load existing data into form
   useEffect(() => {
-    const data = getActivityData();
+    const data = getActivityData(dateParam);
     setActivityData(data);
     const initial: Record<string, number | undefined> = {};
     const config = PERIOD_CONFIG[activePeriod];
@@ -104,10 +106,10 @@ export function CheckIn() {
     Object.entries(formData).forEach(([key, val]) => {
       if (val != null) (updates as any)[key] = val;
     });
-    const updated = saveActivityData(updates);
-    markCheckIn(activePeriod);
+    const updated = saveActivityData(updates, dateParam);
+    markCheckIn(activePeriod, dateParam);
     setActivityData(updated);
-    setCheckIns(getCheckInStatus());
+    setCheckIns(getCheckInStatus(dateParam));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -124,14 +126,14 @@ export function CheckIn() {
       distance_km: workout.distance_km,
       notes: workout.notes,
     };
-    const updated = addWorkout(entry);
+    const updated = addWorkout(entry, dateParam);
     setActivityData(updated);
     setWorkout({ type: 'Strength', duration_minutes: 45 });
     setShowWorkoutForm(false);
   }
 
   function handleRemoveWorkout(id: string) {
-    const updated = removeWorkout(id);
+    const updated = removeWorkout(id, dateParam);
     setActivityData(updated);
   }
 

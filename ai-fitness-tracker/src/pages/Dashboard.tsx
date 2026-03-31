@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Camera, Droplets, Flame, Footprints, Heart, Moon, Zap,
-  Sun, Sunset, ChevronRight, Bell, BellOff, Dumbbell, Activity,
+  Sun, Sunset, ChevronRight, ChevronLeft, Bell, BellOff, Dumbbell, Activity,
   Battery, Brain, Check,
 } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
-import type { UserProfile, GarminData } from '../types';
+import type { UserProfile } from '../types';
 import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus } from '../lib/storage';
 import { displayWater, displayWaterTarget, waterIncrements, displayWeight } from '../lib/units';
 import {
@@ -19,23 +19,51 @@ interface DashboardProps {
   profile: UserProfile;
 }
 
+function dateToKey(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function isToday(d: Date): boolean {
+  return dateToKey(d) === dateToKey(new Date());
+}
+
+function formatDateHeader(d: Date, isCurrentDay: boolean): string {
+  if (isCurrentDay) return 'Today';
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (dateToKey(d) === dateToKey(yesterday)) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 export function Dashboard({ profile }: DashboardProps) {
   const navigate = useNavigate();
-  const [summary, setSummary] = useState(getDailySummary());
-  const [activity, setActivity] = useState<GarminData>(getActivityData());
-  const [water, setWater] = useState(getWaterIntake());
-  const [checkIns, setCheckIns] = useState(getCheckInStatus());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initDate = searchParams.get('date');
+  const [selectedDate, setSelectedDate] = useState(() =>
+    initDate ? new Date(initDate + 'T12:00:00') : new Date()
+  );
+  const currentDay = isToday(selectedDate);
+  const dateKey = dateToKey(selectedDate);
+
+  const refreshData = useCallback(() => ({
+    summary: getDailySummary(dateKey),
+    activity: getActivityData(dateKey),
+    water: getWaterIntake(dateKey),
+    checkIns: getCheckInStatus(dateKey),
+  }), [dateKey]);
+
+  const [data, setData] = useState(refreshData);
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSummary(getDailySummary());
-      setWater(getWaterIntake());
-      setActivity(getActivityData());
-      setCheckIns(getCheckInStatus());
-    }, 3000);
+    setData(refreshData());
+    if (!currentDay) return;
+    const interval = setInterval(() => setData(refreshData()), 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshData, currentDay]);
+
+  const { summary, activity, water, checkIns } = data;
 
   // Start notification scheduling
   useEffect(() => {
@@ -60,18 +88,46 @@ export function Dashboard({ profile }: DashboardProps) {
 
   const caloriesLeft = Math.max(targets.calories - summary.calories, 0);
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greeting = currentDay
+    ? (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening')
+    : formatDateHeader(selectedDate, false);
   const currentPeriod = getCurrentCheckInPeriod();
-  const nudge = getCheckInNudge(checkIns);
+  const nudge = currentDay ? getCheckInNudge(checkIns) : null;
+
+  function goBack() {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() - 1);
+    setSelectedDate(d);
+    setSearchParams({ date: dateToKey(d) });
+  }
+  function goForward() {
+    if (currentDay) return;
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + 1);
+    setSelectedDate(d);
+    if (isToday(d)) setSearchParams({});
+    else setSearchParams({ date: dateToKey(d) });
+  }
+
   return (
     <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-lg font-bold text-white font-display">{greeting}</h1>
-          <p className="text-xs text-slate-400">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <button onClick={goBack} className="text-slate-400 hover:text-neon-teal transition p-0.5">
+              <ChevronLeft size={16} />
+            </button>
+            <button onClick={() => { setSelectedDate(new Date()); setSearchParams({}); }} className="text-xs text-slate-400 hover:text-white transition min-w-[100px] text-center">
+              {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </button>
+            <button onClick={goForward} disabled={currentDay}
+              className={`p-0.5 transition ${currentDay ? 'text-slate-600 cursor-default' : 'text-slate-400 hover:text-neon-teal'}`}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
@@ -94,6 +150,16 @@ export function Dashboard({ profile }: DashboardProps) {
           </button>
         </div>
       </div>
+
+      {/* Past day banner */}
+      {!currentDay && (
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-neon-teal/5 border border-neon-teal/20">
+          <span className="text-xs text-neon-teal">Viewing {formatDateHeader(selectedDate, false)} — you can still add entries</span>
+          <button onClick={() => { setSelectedDate(new Date()); setSearchParams({}); }} className="text-[10px] text-neon-teal font-semibold px-2 py-1 rounded-lg bg-neon-teal/10">
+            Back to Today
+          </button>
+        </div>
+      )}
 
       {/* Check-in nudge */}
       {nudge && (
@@ -195,7 +261,7 @@ export function Dashboard({ profile }: DashboardProps) {
         </div>
         <div className="flex gap-2">
           {waterIncrements(profile).map(({ ml, label }) => (
-            <button key={ml} onClick={() => { addWater(ml); setWater(getWaterIntake()); }}
+            <button key={ml} onClick={() => { addWater(ml, dateKey); setData(refreshData()); }}
               className="flex-1 py-2 rounded-lg bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/20 hover:bg-blue-500/20 transition"
             >
               {label}
@@ -273,20 +339,20 @@ export function Dashboard({ profile }: DashboardProps) {
 
         {/* Empty state */}
         {!activity.steps && !activity.sleep_hours && !activity.heart_rate_resting && (
-          <button onClick={() => navigate('/checkin')}
+          <button onClick={() => navigate(currentDay ? '/checkin' : `/checkin?date=${dateKey}`)}
             className="w-full py-3 mt-1 rounded-xl border border-dashed border-white/20 text-slate-500 text-xs hover:border-neon-teal/40 hover:text-neon-teal transition"
           >
-            Tap to log today's Garmin data
+            {currentDay ? "Tap to log today's Garmin data" : `Tap to log data for ${formatDateHeader(selectedDate, false)}`}
           </button>
         )}
       </div>
 
       {/* Quick Actions */}
       <div className="flex gap-3">
-        <button onClick={() => navigate('/snap')}
+        <button onClick={() => navigate(currentDay ? '/snap' : `/snap?date=${dateKey}`)}
           className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal/20 to-neon-pink/20 border border-neon-teal/30 text-white text-sm font-medium flex items-center justify-center gap-2"
         >
-          <Camera size={16} /> Snap Food
+          <Camera size={16} /> {currentDay ? 'Snap Food' : 'Add Food'}
         </button>
         <button onClick={() => navigate('/chat')}
           className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-pink/20 to-neon-pink/20 border border-neon-pink/30 text-white text-sm font-medium flex items-center justify-center gap-2"
