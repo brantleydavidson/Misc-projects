@@ -331,7 +331,7 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
           <h1 className={`font-display text-4xl tracking-wider text-neon-teal glow-text transition-opacity duration-500 ${
             arrivalStep >= 4 ? 'opacity-100' : 'opacity-0'
           }`}>
-            JACKEDAI
+            BEJACKED
           </h1>
 
           {/* Tagline */}

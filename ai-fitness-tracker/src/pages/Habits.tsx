@@ -114,7 +114,7 @@ export function Habits() {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-lg font-bold text-white font-display flex items-center gap-2">
+          <h1 className="text-lg font-bold text-white font-display uppercase flex items-center gap-2">
             <Flame size={20} className="text-orange-400" />
             Habits
           </h1>
@@ -159,7 +159,7 @@ export function Habits() {
         if (!items?.length) return null;
         return (
           <div key={cat}>
-            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
+            <div className="text-[10px] font-semibold text-slate-500 font-ui uppercase tracking-wider mb-2 px-1">
               {categoryLabels[cat]}
             </div>
             <div className="space-y-2">
@@ -190,10 +190,10 @@ export function Habits() {
                         {streak > 0 && (
                           <span className="flex items-center gap-0.5">
                             <Flame size={10} className="text-orange-400" />
-                            {streak} day streak
+                            <span className="font-data">{streak}</span> day streak
                           </span>
                         )}
-                        <span>{Math.round(rate * 100)}% / 30d</span>
+                        <span><span className="font-data">{Math.round(rate * 100)}%</span> / 30d</span>
                       </div>
                     </div>
                     <button onClick={() => handleRemove(habit.id)}
@@ -225,7 +225,7 @@ export function Habits() {
       {/* Add habits section */}
       <div className="glass rounded-2xl p-4 space-y-3">
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-white font-ui uppercase tracking-wider flex items-center gap-2">
             <Plus size={16} className="text-neon-teal" />
             Add Habits
           </h3>
@@ -289,7 +289,7 @@ export function Habits() {
       {/* 7-day overview */}
       {totalCount > 0 && (
         <div className="glass rounded-2xl p-4">
-          <h3 className="text-sm font-semibold text-white mb-3">Last 7 Days</h3>
+          <h3 className="text-sm font-semibold text-white font-ui uppercase tracking-wider mb-3">Last 7 Days</h3>
           <div className="flex gap-1.5 justify-between">
             {Array.from({ length: 7 }).map((_, i) => {
               const d = new Date();

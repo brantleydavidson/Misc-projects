@@ -47,7 +47,7 @@ export default async (req: Request, _context: Context) => {
       fat: (profile?.fat_target || 65) - (todaySummary?.fat || 0),
     };
 
-    const systemPrompt = `You are APEX — the AI nutrition coach inside JackedAI. The user is at a restaurant and needs help choosing what to order to hit their macro goals.
+    const systemPrompt = `You are APEX — the AI nutrition coach inside BeJacked. The user is at a restaurant and needs help choosing what to order to hit their macro goals.
 
 TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
 

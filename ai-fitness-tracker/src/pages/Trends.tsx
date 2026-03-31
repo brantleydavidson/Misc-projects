@@ -60,7 +60,7 @@ export function Trends({ profile }: TrendsProps) {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-lg font-bold text-white font-display flex items-center gap-2">
+          <h1 className="text-lg font-bold text-white font-display uppercase flex items-center gap-2">
             <TrendingUp size={20} className="text-neon-teal" />
             Trends
           </h1>
@@ -72,7 +72,7 @@ export function Trends({ profile }: TrendsProps) {
       <div className="flex gap-2">
         {([7, 14, 30] as TimeRange[]).map(r => (
           <button key={r} onClick={() => setRange(r)}
-            className={`flex-1 py-2 rounded-xl text-xs font-medium transition ${
+            className={`flex-1 py-2 rounded-xl text-xs font-medium font-ui uppercase transition ${
               range === r
                 ? 'bg-neon-teal/20 text-neon-teal border border-neon-teal/30'
                 : 'glass text-slate-400 border border-white/5'
@@ -95,7 +95,7 @@ export function Trends({ profile }: TrendsProps) {
       <div className="flex gap-1 p-1 glass rounded-xl">
         {(['nutrition', 'body', 'activity'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition ${
+            className={`flex-1 py-2 rounded-lg text-xs font-medium font-ui uppercase transition ${
               tab === t ? 'bg-neon-teal/20 text-neon-teal' : 'text-slate-400'
             }`}
           >
@@ -464,7 +464,7 @@ function ChartCard({ title, icon, subtitle, subtitleColor, compact, children }: 
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {icon}
-          <span className="text-sm font-semibold text-white">{title}</span>
+          <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">{title}</span>
         </div>
         {subtitle && (
           <span className={`text-xs ${subtitleColor || 'text-slate-400'}`}>{subtitle}</span>

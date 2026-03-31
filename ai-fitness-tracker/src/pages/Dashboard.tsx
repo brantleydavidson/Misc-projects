@@ -88,8 +88,13 @@ export function Dashboard({ profile }: DashboardProps) {
 
   const caloriesLeft = Math.max(targets.calories - summary.calories, 0);
   const hour = new Date().getHours();
+  const dayNumber = profile.created_at
+    ? Math.max(1, Math.ceil((Date.now() - new Date(profile.created_at).getTime()) / 86400000))
+    : 1;
   const greeting = currentDay
-    ? (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening')
+    ? (profile.display_name
+        ? `${profile.display_name}. DAY ${dayNumber}. LET'S MOVE.`
+        : (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'))
     : formatDateHeader(selectedDate, false);
   const currentPeriod = getCurrentCheckInPeriod();
   const nudge = currentDay ? getCheckInNudge(checkIns) : null;
@@ -114,7 +119,7 @@ export function Dashboard({ profile }: DashboardProps) {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-lg font-bold text-white font-display">{greeting}</h1>
+          <h1 className="text-lg font-bold text-white font-display uppercase">{greeting}</h1>
           <div className="flex items-center gap-2 mt-0.5">
             <button onClick={goBack} className="text-slate-400 hover:text-neon-teal transition p-0.5">
               <ChevronLeft size={16} />
@@ -186,7 +191,7 @@ export function Dashboard({ profile }: DashboardProps) {
           const icons = { morning: <Sun size={12} />, midday: <Sunset size={12} />, evening: <Moon size={12} /> };
           return (
             <button key={p} onClick={() => navigate('/checkin')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs capitalize transition ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs capitalize transition hud-corners ${
                 done
                   ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                   : p === currentPeriod
@@ -214,20 +219,20 @@ export function Dashboard({ profile }: DashboardProps) {
           <div className="flex-1 space-y-2 ml-4">
             <div className="flex items-center gap-2">
               <Flame size={14} className="text-orange-400" />
-              <span className="text-xs text-slate-300">{Math.round(summary.calories)} eaten</span>
+              <span className="text-xs text-slate-300"><span className="font-data">{Math.round(summary.calories)}</span> eaten</span>
             </div>
             <div className="flex items-center gap-2">
               <Zap size={14} className="text-yellow-400" />
-              <span className="text-xs text-slate-300">{activity.calories_active || activity.calories_burned || '—'} burned</span>
+              <span className="text-xs text-slate-300"><span className="font-data">{activity.calories_active || activity.calories_burned || '—'}</span> burned</span>
             </div>
             {activity.calories_total != null && (
               <div className="flex items-center gap-2">
                 <Flame size={14} className="text-red-400" />
-                <span className="text-xs text-slate-300">{activity.calories_total} total TDEE</span>
+                <span className="text-xs text-slate-300"><span className="font-data">{activity.calories_total}</span> total TDEE</span>
               </div>
             )}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-300 font-semibold">Target: {targets.calories} cal</span>
+              <span className="text-xs text-slate-300 font-semibold">Target: <span className="font-data">{targets.calories}</span> cal</span>
             </div>
             <button onClick={(e) => { e.stopPropagation(); navigate(`/log${currentDay ? '' : `?date=${dateKey}`}`); }}
               className="text-xs text-neon-teal hover:underline transition text-left"
@@ -285,7 +290,7 @@ export function Dashboard({ profile }: DashboardProps) {
             <Droplets size={16} className="text-blue-400" />
             <h2 className="text-sm font-semibold text-white">Hydration</h2>
           </div>
-          <span className="text-xs text-slate-400">{displayWater(water, profile)} / {displayWaterTarget(targets.water / 1000, profile)}</span>
+          <span className="text-xs text-slate-400 font-data">{displayWater(water, profile)} / {displayWaterTarget(targets.water / 1000, profile)}</span>
         </div>
         <div className="h-3 bg-white/10 rounded-full overflow-hidden mb-3">
           <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-neon-teal transition-all duration-500"
@@ -416,7 +421,7 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
   return (
     <div className="text-center">
       <div className={`flex justify-center mb-1 ${color}`}>{icon}</div>
-      <div className="text-sm font-bold text-white">{value}</div>
+      <div className="text-sm font-bold text-white font-data">{value}</div>
       <div className="text-[10px] text-slate-400">{label}</div>
     </div>
   );

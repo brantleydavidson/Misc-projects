@@ -20,7 +20,7 @@ import {
 
 type EmailTemplate = 'welcome' | 'weekly_report' | 'streak_milestone' | 'missed_checkin';
 
-const FROM_EMAIL = 'JackedAI <noreply@jackedai.app>';
+const FROM_EMAIL = 'BeJacked <noreply@bejacked.ai>';
 
 function renderTemplate(template: EmailTemplate, data: Record<string, string> = {}): { subject: string; html: string } {
   const name = data.name || 'there';
@@ -28,11 +28,11 @@ function renderTemplate(template: EmailTemplate, data: Record<string, string> = 
   switch (template) {
     case 'welcome':
       return {
-        subject: 'Welcome to JackedAI — Your AI Coach Is Ready',
+        subject: 'Welcome to BeJacked — Your AI Coach Is Ready',
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; background: #0A1628; color: #E2E8F0;">
             <div style="text-align: center; margin-bottom: 24px;">
-              <h1 style="background: linear-gradient(135deg, #00E5CC, #FF2D78); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 28px; margin: 0;">JackedAI</h1>
+              <h1 style="background: linear-gradient(135deg, #00E5CC, #FF2D78); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 28px; margin: 0;">BeJacked</h1>
               <p style="color: #64748B; font-size: 14px; margin-top: 4px;">Your AI Fitness Protocol</p>
             </div>
             <p>Hey ${name},</p>
@@ -44,7 +44,7 @@ function renderTemplate(template: EmailTemplate, data: Record<string, string> = 
             </ul>
             <p>Your targets are set based on sports science (ISSN guidelines). If they don't feel right, just tell your coach — APEX will adjust them for you.</p>
             <div style="text-align: center; margin: 24px 0;">
-              <a href="https://jackedai.netlify.app" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #00E5CC, #FF2D78); color: white; text-decoration: none; border-radius: 12px; font-weight: 600;">Open JackedAI</a>
+              <a href="https://jackedai.netlify.app" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #00E5CC, #FF2D78); color: white; text-decoration: none; border-radius: 12px; font-weight: 600;">Open BeJacked</a>
             </div>
             <p style="color: #64748B; font-size: 12px; text-align: center;">Let's get jacked. — APEX</p>
           </div>`,

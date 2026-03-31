@@ -58,7 +58,7 @@ export default async (req: Request, _context: Context) => {
       nutritionContext += 'USE this data to ground your estimates. Adjust for actual portion sizes in the photo.\n--- END NUTRITION DATA ---\n';
     }
 
-    const systemPrompt = `You are APEX's food analysis module inside JackedAI. You are an expert nutritionist who identifies food from photos and estimates macronutrients with high accuracy.
+    const systemPrompt = `You are APEX's food analysis module inside BeJacked. You are an expert nutritionist who identifies food from photos and estimates macronutrients with high accuracy.
 ${memoryContext}${nutritionContext}
 YOUR APPROACH:
 1. Identify every visible food item in the photo

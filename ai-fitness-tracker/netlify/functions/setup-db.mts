@@ -6,7 +6,7 @@ import type { Context } from "@netlify/functions";
 
 const SQL = `
 -- ============================================================
--- JackedAI Database Schema
+-- BeJacked Database Schema
 -- Run this in Supabase SQL Editor (https://supabase.com/dashboard)
 -- ============================================================
 
@@ -234,7 +234,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Seed a launch discount code
 INSERT INTO ja_discount_codes (code, grants_tier, duration_days, max_uses, message)
-VALUES ('LAUNCH2024', 'pro', 90, 500, 'Welcome to JackedAI Pro — 90 days free!')
+VALUES ('LAUNCH2024', 'pro', 90, 500, 'Welcome to BeJacked Pro — 90 days free!')
 ON CONFLICT (code) DO NOTHING;
 `;
 

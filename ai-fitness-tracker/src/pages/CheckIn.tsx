@@ -245,7 +245,7 @@ export function CheckIn({ profile }: CheckInProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-white">Activity Check-in</h1>
+          <h1 className="text-lg font-bold text-white font-display uppercase">Activity Check-in</h1>
           <div className="flex items-center gap-2 mt-0.5">
             <button onClick={() => {
               const d = new Date(selectedDate);
@@ -314,7 +314,7 @@ export function CheckIn({ profile }: CheckInProps) {
         <div className="flex items-center gap-3">
           {config.icon}
           <div>
-            <h2 className="text-sm font-semibold text-white">{config.title}</h2>
+            <h2 className="text-sm font-semibold text-white font-ui uppercase tracking-wider">{config.title}</h2>
             <p className="text-xs text-slate-400">{config.subtitle}</p>
           </div>
         </div>
@@ -356,7 +356,7 @@ export function CheckIn({ profile }: CheckInProps) {
                     [field.key]: e.target.value ? Number(e.target.value) : undefined,
                   }))}
                   placeholder={placeholder}
-                  className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
+                  className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-white font-data placeholder-slate-600 border border-white/10 focus:border-neon-teal focus:outline-none"
                 />
               </div>
             );
@@ -367,7 +367,7 @@ export function CheckIn({ profile }: CheckInProps) {
           className={`w-full py-3 rounded-xl text-white text-sm font-semibold transition ${
             saved
               ? 'bg-green-600'
-              : 'bg-gradient-to-r from-neon-teal to-neon-pink'
+              : 'btn-neon glow-teal'
           }`}
         >
           {saved ? '✓ Saved!' : checkIns[activePeriod] ? 'Update Check-in' : 'Save Check-in'}
@@ -416,7 +416,7 @@ export function CheckIn({ profile }: CheckInProps) {
       {activePeriod === 'morning' && (
         <div className="glass rounded-2xl p-4 space-y-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white font-ui uppercase tracking-wider flex items-center gap-2">
               <Camera size={16} className="text-neon-pink" />
               Progress Photos
             </h3>
@@ -504,7 +504,7 @@ export function CheckIn({ profile }: CheckInProps) {
       {(activePeriod === 'midday' || activePeriod === 'evening') && (
         <div className="glass rounded-2xl p-4 space-y-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white font-ui uppercase tracking-wider flex items-center gap-2">
               <Dumbbell size={16} className="text-neon-pink" /> Workouts
             </h3>
             <button onClick={() => setShowWorkoutForm(!showWorkoutForm)}

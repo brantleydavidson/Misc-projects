@@ -80,7 +80,7 @@ async function lookupOpenFoodFacts(barcode: string): Promise<{
   try {
     const res = await fetch(
       `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,brands,nutriments,serving_size,image_front_small_url`,
-      { headers: { 'User-Agent': 'JackedAI/1.0 (fitness-tracker)' } }
+      { headers: { 'User-Agent': 'BeJacked/1.0 (fitness-tracker)' } }
     );
 
     if (!res.ok) return null;

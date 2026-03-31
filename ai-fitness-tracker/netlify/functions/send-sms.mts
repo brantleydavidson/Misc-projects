@@ -24,7 +24,7 @@ function renderSmsTemplate(template: SmsTemplate, data: Record<string, string> =
 
   switch (template) {
     case 'weigh_in_reminder':
-      return `Hey ${name}, it's weigh-in day! Step on the scale and log it in JackedAI. Consistency > perfection. 💪`;
+      return `Hey ${name}, it's weigh-in day! Step on the scale and log it in BeJacked. Consistency > perfection. 💪`;
 
     case 'missed_checkin':
       return `Hey ${name}, APEX noticed you didn't log yesterday. No stress — just snap a meal when you're ready. jackedai.netlify.app/snap`;
@@ -33,7 +33,7 @@ function renderSmsTemplate(template: SmsTemplate, data: Record<string, string> =
       return `🔥 ${data.streak || '7'}-day streak! You've logged ${data.streak || '7'} days in a row, ${name}. Keep executing the protocol.`;
 
     case 'custom':
-      return data.message || 'JackedAI: Check in with your coach today.';
+      return data.message || 'BeJacked: Check in with your coach today.';
   }
 }
 

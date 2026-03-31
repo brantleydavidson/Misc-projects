@@ -55,7 +55,7 @@ export default async (req: Request, _context: Context) => {
 
     const isComparison = !!previousPhoto;
 
-    const systemPrompt = `You are APEX, an AI fitness coach analyzing body progress photos for the JackedAI app. Be honest, specific, and encouraging.
+    const systemPrompt = `You are APEX, an AI fitness coach analyzing body progress photos for the BeJacked app. Be honest, specific, and encouraging.
 
 ${profileSummary ? `USER CONTEXT:\n${profileSummary}\n` : ''}
 RULES:

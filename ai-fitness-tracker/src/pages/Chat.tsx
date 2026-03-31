@@ -146,7 +146,7 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
         <div>
-          <h1 className="text-lg font-bold text-white flex items-center gap-2">
+          <h1 className="text-lg font-bold text-white font-display uppercase flex items-center gap-2">
             <Sparkles size={18} className="text-neon-pink" />
             AI Coach
           </h1>
@@ -175,7 +175,7 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
             <div className="space-y-2">
               {QUICK_PROMPTS.map(prompt => (
                 <button key={prompt} onClick={() => handleSend(prompt)}
-                  className="w-full text-left px-4 py-3 rounded-xl glass text-sm text-slate-300 hover:text-white hover:bg-white/10 transition"
+                  className="w-full text-left px-4 py-3 rounded-xl glass text-sm font-ui text-slate-300 hover:text-white hover:bg-white/10 transition"
                 >
                   {prompt}
                 </button>
@@ -193,7 +193,7 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
           return (
             <div key={i}>
               <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed font-body ${
                   msg.role === 'user'
                     ? 'bg-gradient-to-r from-neon-teal to-neon-pink text-white rounded-br-md'
                     : 'glass text-slate-200 rounded-bl-md'
@@ -328,7 +328,7 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
             onKeyDown={handleKeyDown}
             placeholder="Ask your coach..."
             rows={1}
-            className="flex-1 bg-transparent text-white text-sm placeholder-slate-500 resize-none focus:outline-none px-2 py-1.5 max-h-24"
+            className="flex-1 bg-transparent text-white text-sm font-body placeholder-slate-500 resize-none focus:outline-none px-2 py-1.5 max-h-24"
           />
           <button onClick={() => handleSend()} disabled={loading || !input.trim()}
             className="w-9 h-9 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink flex items-center justify-center disabled:opacity-30 transition flex-shrink-0"

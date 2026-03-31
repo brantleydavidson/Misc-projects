@@ -69,7 +69,7 @@ export default async (req: Request, _context: Context) => {
           await sendTwilioSms(
             accountSid, authToken, fromNumber,
             profile.phone,
-            `Good morning! It's weigh-in day. Step on the scale and log it in JackedAI — tracking trends matters more than any single number. 💪`
+            `Good morning! It's weigh-in day. Step on the scale and log it in BeJacked — tracking trends matters more than any single number. 💪`
           );
           sentCount++;
         } else {

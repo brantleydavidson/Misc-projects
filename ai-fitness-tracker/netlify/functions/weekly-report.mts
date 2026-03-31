@@ -141,7 +141,7 @@ export default async (req: Request, _context: Context) => {
               'Authorization': `Bearer ${resendKey}`,
             },
             body: JSON.stringify({
-              from: 'JackedAI <noreply@jackedai.app>',
+              from: 'BeJacked <noreply@bejacked.ai>',
               to: [profile.email],
               subject,
               html,

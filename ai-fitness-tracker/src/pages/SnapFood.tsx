@@ -492,7 +492,7 @@ export function SnapFood() {
         <button onClick={() => { stopCamera(); stopBarcodeScanner(); navigate(dateParam ? `/?date=${dateParam}` : '/'); }} className="text-slate-400">
           <X size={24} />
         </button>
-        <h1 className="text-lg font-bold gradient-text">
+        <h1 className="text-lg font-bold gradient-text font-display uppercase">
           {mode === 'manual' ? 'Manual Entry' : mode === 'barcode' ? 'Scan Barcode' : mode === 'progress' ? 'Progress Photos' : 'Snap Food'}
         </h1>
         {(mode === 'conversation' || mode === 'manual' || mode === 'barcode' || mode === 'progress') ? (
@@ -513,7 +513,7 @@ export function SnapFood() {
       <div className="flex gap-2 px-4 mb-4 flex-shrink-0">
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
           <button key={t} onClick={() => setMealType(t)}
-            className={`flex-1 py-2 rounded-lg text-xs capitalize transition ${mealType === t
+            className={`flex-1 py-2 rounded-lg text-xs capitalize transition font-ui uppercase tracking-wider ${mealType === t
               ? 'bg-neon-teal/20 text-neon-teal border border-neon-teal/50'
               : 'bg-white/5 text-slate-400 border border-white/10'}`}
           >{t}</button>
@@ -538,7 +538,7 @@ export function SnapFood() {
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center pulse-ring">
               <Camera size={24} className="text-white" />
             </div>
-            <span className="text-white font-medium">Take Photo</span>
+            <span className="text-white font-medium font-ui uppercase tracking-wider">Take Photo</span>
             <span className="text-slate-500 text-xs">AI identifies food + estimates macros</span>
           </button>
 
@@ -597,7 +597,7 @@ export function SnapFood() {
               <RotateCcw size={16} /> Retake
             </button>
             <button onClick={analyzeImage}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink text-white font-semibold flex items-center justify-center gap-2"
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-neon-teal to-neon-pink text-white font-semibold font-ui uppercase tracking-wider flex items-center justify-center gap-2"
             >
               <Zap size={16} /> Analyze
             </button>
@@ -869,7 +869,7 @@ export function SnapFood() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-2 no-scrollbar space-y-2">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed font-body ${
                   msg.role === 'user'
                     ? 'bg-neon-teal/15 text-chrome border border-neon-teal/20 rounded-br-md'
                     : 'glass text-slate-200 rounded-bl-md'

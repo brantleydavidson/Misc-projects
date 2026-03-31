@@ -14,7 +14,7 @@ export function MacroBar({ label, value, target, color, unit = 'g' }: MacroBarPr
     <div className="flex-1">
       <div className="flex justify-between items-baseline mb-1">
         <span className="text-xs font-medium text-slate-300">{label}</span>
-        <span className="text-xs text-slate-500">{Math.round(value)}/{target}{unit}</span>
+        <span className="text-xs text-slate-500 font-data">{Math.round(value)}/{target}{unit}</span>
       </div>
       <div className="h-2 bg-white/10 rounded-full overflow-hidden">
         <div
@@ -22,7 +22,7 @@ export function MacroBar({ label, value, target, color, unit = 'g' }: MacroBarPr
           style={{ width: `${pct}%`, backgroundColor: color }}
         />
       </div>
-      <div className="text-[10px] text-slate-500 mt-0.5">{Math.round(remaining)}{unit} left</div>
+      <div className="text-[10px] text-slate-500 mt-0.5 font-data">{Math.round(remaining)}{unit} left</div>
     </div>
   );
 }

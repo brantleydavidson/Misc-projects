@@ -76,7 +76,7 @@ export function Login({ onLoggedIn, onStartOnboarding }: LoginProps) {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
             <Dumbbell size={32} className="text-white" />
           </div>
-          <h1 className="font-display text-3xl tracking-wider text-neon-teal glow-text">JACKEDAI</h1>
+          <h1 className="font-display text-3xl tracking-wider text-neon-teal glow-text">BEJACKED</h1>
           <p className="font-ui text-xs text-chrome/40 mt-2 tracking-widest uppercase">Welcome back</p>
         </div>
 

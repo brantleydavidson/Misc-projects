@@ -171,3 +171,71 @@ body {
 .btn-neon:active {
   transform: scale(0.96);
 }
+
+/* ── Brand brief additions ──────────────────────────────── */
+
+/* Neon glow — orange (achievements, streaks, milestones) */
+.glow-orange {
+  box-shadow: 0 0 12px rgba(255,107,26,0.4), 0 0 40px rgba(255,107,26,0.15);
+}
+
+/* Neon glow — purple (AI/APEX elements) */
+.glow-purple {
+  box-shadow: 0 0 12px rgba(139,47,201,0.4), 0 0 40px rgba(139,47,201,0.15);
+}
+
+/* Miami Sunset gradient — hero backgrounds, achievement screens */
+.gradient-sunset {
+  background: linear-gradient(180deg, #8B2FC9 0%, #FF2D78 35%, #FF6B1A 70%, #050D1A 100%);
+}
+
+/* Vice Horizon gradient — section dividers, loading bars */
+.gradient-vice {
+  background: linear-gradient(90deg, #00E5CC, #8B2FC9, #FF2D78);
+}
+
+/* VHS grain overlay */
+.vhs-grain {
+  position: relative;
+}
+.vhs-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Chromatic aberration text — for achievement moments */
+.chromatic-text {
+  position: relative;
+  display: inline-block;
+}
+
+/* Perspective grid animation */
+@keyframes grid-drift {
+  from { background-position: 0 0; }
+  to { background-position: 0 40px; }
+}
+.grid-drift {
+  animation: grid-drift 20s linear infinite;
+}
+
+/* Odometer number flip */
+@keyframes count-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.count-up { animation: count-up 0.6s ease-out forwards; }
+
+/* VHS glitch transition */
+@keyframes vhs-glitch {
+  0% { transform: translateX(0); filter: none; }
+  20% { transform: translateX(-3px); filter: hue-rotate(90deg); }
+  40% { transform: translateX(3px); filter: hue-rotate(-90deg); }
+  60% { transform: translateX(-1px); filter: none; }
+  100% { transform: translateX(0); filter: none; }
+}
+.vhs-glitch { animation: vhs-glitch 0.2s linear; }

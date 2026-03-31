@@ -22,7 +22,7 @@ export default async (req: Request, _context: Context) => {
   try {
     const { profile } = await req.json();
 
-    const systemPrompt = `You are JackedAI's meal plan generator. Create a fun, exciting 7-day meal plan personalized to this user.
+    const systemPrompt = `You are BeJacked's meal plan generator. Create a fun, exciting 7-day meal plan personalized to this user.
 
 USER PROFILE:
 - Calorie target: ${profile.calorie_target} cal/day

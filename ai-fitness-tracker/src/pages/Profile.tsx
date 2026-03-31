@@ -209,14 +209,14 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
           )}
         </div>
         <h1 className="text-lg font-bold gradient-text font-display">
-          {profile.display_name || 'JackedAI'}
+          {profile.display_name || 'BeJacked'}
         </h1>
         <p className="text-xs text-slate-400">{user?.email || 'Your AI fitness protocol'}</p>
       </div>
 
       {/* Stats Overview */}
       <div className="glass rounded-2xl p-4">
-        <h2 className="text-sm font-semibold text-white mb-3">Your Stats</h2>
+        <h2 className="text-sm font-semibold text-white font-ui uppercase tracking-wider mb-3">Your Stats</h2>
         <div className="grid grid-cols-2 gap-3">
           <StatItem label="Age" value={`${profile.age || '—'}`} />
           <StatItem label="Height" value={profile.height_cm ? displayHeight(profile.height_cm, profile) : '—'} />

@@ -122,7 +122,7 @@ export function Upgrade({ onBack }: UpgradeProps) {
             <Crown size={20} className="text-yellow-400" />
             Upgrade
           </h1>
-          <p className="text-xs text-slate-400">Unlock the full JackedAI experience</p>
+          <p className="text-xs text-slate-400">Unlock the full BeJacked experience</p>
         </div>
       </div>
 
