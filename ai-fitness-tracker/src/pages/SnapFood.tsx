@@ -855,7 +855,7 @@ export function SnapFood() {
           </div>
 
           {/* Actions + input */}
-          <div className="flex-shrink-0 px-4 pb-24 pt-2 space-y-2">
+          <div className="flex-shrink-0 px-4 pb-32 pt-2 space-y-2">
             {/* Quick clarification chips */}
             {foodData && !loading && (
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -894,6 +894,16 @@ export function SnapFood() {
               </div>
             )}
 
+            {/* Log button — full width when we have valid macros */}
+            {hasValidMacros && !foodData!.needs_clarification && (
+              <button
+                onClick={() => logFood()}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition"
+              >
+                <Check size={18} /> Log This Meal
+              </button>
+            )}
+
             <div className="flex gap-2 items-end">
               <div className="flex-1 flex gap-2 items-end glass rounded-2xl p-2">
                 <input
@@ -912,16 +922,6 @@ export function SnapFood() {
                   <Send size={14} className="text-white" />
                 </button>
               </div>
-
-              {/* Log button — only when we have valid macros */}
-              {hasValidMacros && !foodData!.needs_clarification && (
-                <button
-                  onClick={() => logFood()}
-                  className="h-12 px-4 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold text-sm flex items-center gap-1.5 flex-shrink-0"
-                >
-                  <Check size={16} /> Log
-                </button>
-              )}
             </div>
           </div>
         </>
