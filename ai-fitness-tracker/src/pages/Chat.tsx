@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Trash2, Sparkles, Settings2 } from 'lucide-react';
-import type { UserProfile, ChatMessage } from '../types';
-import { getChatMessages, addChatMessage, clearChat, getDailySummary, getGarminData } from '../lib/storage';
+import { Send, Loader2, Trash2, Sparkles, Settings2, UtensilsCrossed, Check } from 'lucide-react';
+import type { UserProfile, ChatMessage, FoodEntry } from '../types';
+import { getChatMessages, addChatMessage, clearChat, getDailySummary, getGarminData, addFoodEntry } from '../lib/storage';
 import { sendChat } from '../lib/api';
 
 interface ChatProps {
@@ -12,9 +12,9 @@ interface ChatProps {
 const QUICK_PROMPTS = [
   "What should I eat for dinner to hit my macros?",
   "Am I on track today?",
+  "I ate out yesterday — help me log it",
   "Give me a high-protein snack idea",
   "My macro targets seem off — can we adjust?",
-  "What should I eat before my workout?",
 ];
 
 // Extract profile_update JSON from AI response
@@ -28,9 +28,37 @@ function extractProfileUpdate(text: string): Partial<UserProfile> | null {
   }
 }
 
-// Strip the profile_update block from display text
+// Extract food_log JSON blocks from AI response (can be multiple)
+interface FoodLogData {
+  food_name: string;
+  description?: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  meal_type?: FoodEntry['meal_type'];
+  date?: string; // YYYY-MM-DD for past days
+}
+
+function extractFoodLogs(text: string): FoodLogData[] {
+  const results: FoodLogData[] = [];
+  const regex = /```food_log\s*\n?([\s\S]*?)\n?```/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      results.push(JSON.parse(match[1].trim()));
+    } catch { /* skip malformed */ }
+  }
+  return results;
+}
+
+// Strip all JSON blocks from display text
 function cleanDisplayText(text: string): string {
-  return text.replace(/```profile_update\s*\n?[\s\S]*?\n?```/g, '').trim();
+  return text
+    .replace(/```profile_update\s*\n?[\s\S]*?\n?```/g, '')
+    .replace(/```food_log\s*\n?[\s\S]*?\n?```/g, '')
+    .trim();
 }
 
 export function Chat({ profile, onUpdateProfile }: ChatProps) {
@@ -38,6 +66,7 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [appliedUpdates, setAppliedUpdates] = useState<Set<number>>(new Set());
+  const [loggedFoods, setLoggedFoods] = useState<Set<string>>(new Set()); // "msgIndex-foodIndex"
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,6 +108,24 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
     if (!onUpdateProfile) return;
     onUpdateProfile(update);
     setAppliedUpdates(prev => new Set(prev).add(msgIndex));
+  }
+
+  function logFoodFromChat(msgIndex: number, foodIndex: number, food: FoodLogData) {
+    const key = `${msgIndex}-${foodIndex}`;
+    if (loggedFoods.has(key)) return;
+    addFoodEntry({
+      food_name: food.food_name,
+      description: food.description || '',
+      calories: food.calories,
+      protein: food.protein,
+      carbs: food.carbs,
+      fat: food.fat,
+      fiber: food.fiber,
+      meal_type: food.meal_type || 'lunch',
+      ai_analysis: 'Logged via coach conversation',
+      confidence: 0.85,
+    }, food.date); // food.date is undefined for today, YYYY-MM-DD for past days
+    setLoggedFoods(prev => new Set(prev).add(key));
   }
 
   function handleClear() {
@@ -139,6 +186,7 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
 
         {messages.map((msg, i) => {
           const profileUpdate = msg.role === 'assistant' ? extractProfileUpdate(msg.content) : null;
+          const foodLogs = msg.role === 'assistant' ? extractFoodLogs(msg.content) : [];
           const displayText = msg.role === 'assistant' ? cleanDisplayText(msg.content) : msg.content;
           const isApplied = appliedUpdates.has(i);
 
@@ -211,6 +259,52 @@ export function Chat({ profile, onUpdateProfile }: ChatProps) {
                   </div>
                 </div>
               )}
+
+              {/* Food log action cards */}
+              {foodLogs.map((food, fi) => {
+                const foodKey = `${i}-${fi}`;
+                const isLogged = loggedFoods.has(foodKey);
+                return (
+                  <div key={foodKey} className="flex justify-start mt-2">
+                    <div className={`max-w-[85%] rounded-xl px-4 py-3 border ${
+                      isLogged ? 'bg-green-500/5 border-green-500/20' : 'bg-orange-500/5 border-orange-500/20'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <UtensilsCrossed size={14} className={isLogged ? 'text-green-400' : 'text-orange-400'} />
+                        <span className="text-xs font-semibold text-chrome/70">
+                          {isLogged ? 'Meal Logged' : 'Log This Meal?'}
+                        </span>
+                        {food.date && (
+                          <span className="text-[10px] text-slate-500 ml-auto">
+                            {new Date(food.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-medium text-white mb-1">{food.food_name}</div>
+                      {food.description && <div className="text-[10px] text-slate-400 mb-2">{food.description}</div>}
+                      <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
+                        <div><div className="font-data text-orange-400 text-sm">{food.calories}</div>cal</div>
+                        <div><div className="font-data text-neon-teal text-sm">{food.protein}g</div>protein</div>
+                        <div><div className="font-data text-neon-pink text-sm">{food.carbs}g</div>carbs</div>
+                        <div><div className="font-data text-yellow-400 text-sm">{food.fat}g</div>fat</div>
+                      </div>
+                      {!isLogged && (
+                        <button
+                          onClick={() => logFoodFromChat(i, fi, food)}
+                          className="mt-3 w-full py-2 rounded-lg bg-orange-500/10 text-orange-400 text-xs font-semibold border border-orange-500/30 hover:bg-orange-500/20 transition flex items-center justify-center gap-1.5"
+                        >
+                          <Check size={12} /> Log {food.meal_type || 'Meal'}
+                        </button>
+                      )}
+                      {isLogged && (
+                        <div className="mt-2 text-[10px] text-green-400 text-center flex items-center justify-center gap-1">
+                          <Check size={10} /> Added to {food.date ? new Date(food.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'today'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}

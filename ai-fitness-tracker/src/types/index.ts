@@ -134,9 +134,22 @@ export interface GarminData {
   // Workout (most recent or today's)
   workouts?: WorkoutEntry[];
 
+  // Body progress photos
+  body_photos?: BodyPhoto[];
+
   // Meta
   last_synced?: string;
   check_ins_today?: CheckInStatus;
+}
+
+export interface BodyPhoto {
+  id: string;
+  angle: 'front' | 'side' | 'back';
+  image_base64: string;
+  date: string;        // YYYY-MM-DD
+  weight_kg?: number;
+  notes?: string;
+  created_at: string;
 }
 
 export interface WorkoutEntry {

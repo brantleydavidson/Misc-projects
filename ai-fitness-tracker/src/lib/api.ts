@@ -150,6 +150,28 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeResult> {
   return post<BarcodeResult>('barcode-lookup', { barcode, device_id: deviceId });
 }
 
+// ── Body Progress ──────────────────────────────────────────────────
+
+export interface BodyProgressResult {
+  analysis: string;
+  type: 'comparison' | 'baseline';
+  current_date: string;
+  previous_date: string | null;
+}
+
+export async function analyzeBodyProgress(params: {
+  current_photo: string;
+  previous_photo?: string;
+  current_date: string;
+  previous_date?: string;
+  current_weight_kg?: number;
+  previous_weight_kg?: number;
+  profile_summary?: string;
+}): Promise<BodyProgressResult> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<BodyProgressResult>('body-progress', { ...params, device_id: deviceId });
+}
+
 // ── Usage & Tier ────────────────────────────────────────────────────
 
 export type UsageAction = 'food_snap' | 'coach_message' | 'meal_plan' | 'nutrition_lookup';

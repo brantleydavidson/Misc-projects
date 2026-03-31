@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Sun, Moon, Sunset, Check, Plus, X, Trash2,
   Footprints, Heart, Flame, Zap, Activity, Scale,
   Timer, ArrowUp, Wind, Brain, Star, Battery, Map, Dumbbell,
+  Camera, Loader2,
 } from 'lucide-react';
-import type { GarminData, WorkoutEntry } from '../types';
+import type { GarminData, WorkoutEntry, BodyPhoto } from '../types';
 import {
   getActivityData, saveActivityData, markCheckIn, getCheckInStatus,
-  addWorkout, removeWorkout,
+  addWorkout, removeWorkout, getBodyPhotos, addBodyPhoto, getBodyPhotoDates, getAllBodyPhotos,
 } from '../lib/storage';
+import { analyzeBodyProgress } from '../lib/api';
 import {
   getCurrentCheckInPeriod,
   MORNING_FIELDS, MIDDAY_FIELDS, EVENING_FIELDS,
@@ -87,6 +89,13 @@ export function CheckIn() {
   const [workout, setWorkout] = useState<Partial<WorkoutEntry>>({ type: 'Strength', duration_minutes: 45 });
   const [saved, setSaved] = useState(false);
 
+  // Body progress photo state
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [bodyPhotos, setBodyPhotos] = useState<BodyPhoto[]>(getBodyPhotos(dateParam));
+  const [photoAngle, setPhotoAngle] = useState<'front' | 'side' | 'back'>('front');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+
   // Load existing data into form
   useEffect(() => {
     const data = getActivityData(dateParam);
@@ -135,6 +144,59 @@ export function CheckIn() {
   function handleRemoveWorkout(id: string) {
     const updated = removeWorkout(id, dateParam);
     setActivityData(updated);
+  }
+
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      addBodyPhoto({
+        angle: photoAngle,
+        image_base64: base64,
+        date: dateParam || new Date().toISOString().split('T')[0],
+        weight_kg: activityData.weight_kg,
+      });
+      setBodyPhotos(getBodyPhotos(dateParam));
+      // Auto-advance angle
+      if (photoAngle === 'front') setPhotoAngle('side');
+      else if (photoAngle === 'side') setPhotoAngle('back');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  async function handleAnalyzeProgress() {
+    if (bodyPhotos.length === 0) return;
+    setAnalyzing(true);
+    setAiAnalysis(null);
+    try {
+      // Find the most recent previous set of photos
+      const allDates = getBodyPhotoDates();
+      const currentDateKey = dateParam || new Date().toISOString().split('T')[0];
+      const previousDates = allDates.filter(d => d < currentDateKey);
+      const previousDate = previousDates[previousDates.length - 1];
+      const allPhotos = getAllBodyPhotos();
+      const previousPhotos = previousDate ? allPhotos[previousDate] : [];
+
+      const currentFront = bodyPhotos.find(p => p.angle === 'front');
+      const previousFront = previousPhotos?.find((p: BodyPhoto) => p.angle === 'front');
+
+      const result = await analyzeBodyProgress({
+        current_photo: currentFront?.image_base64 || bodyPhotos[0].image_base64,
+        previous_photo: previousFront?.image_base64,
+        current_date: currentDateKey,
+        previous_date: previousDate,
+        current_weight_kg: activityData.weight_kg,
+        previous_weight_kg: previousFront?.weight_kg,
+      });
+      setAiAnalysis(result.analysis);
+    } catch (err: any) {
+      setAiAnalysis(`Couldn't analyze: ${err.message}`);
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   const periods: Period[] = ['morning', 'midday', 'evening'];
@@ -229,6 +291,94 @@ export function CheckIn() {
           {saved ? '✓ Saved!' : checkIns[activePeriod] ? 'Update Check-in' : 'Save Check-in'}
         </button>
       </div>
+
+      {/* Body Progress Photos (morning check-in) */}
+      {activePeriod === 'morning' && (
+        <div className="glass rounded-2xl p-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Camera size={16} className="text-neon-pink" />
+              Progress Photos
+            </h3>
+            <span className="text-[10px] text-slate-500">Optional</span>
+          </div>
+
+          {/* Angle selector */}
+          <div className="flex gap-2">
+            {(['front', 'side', 'back'] as const).map(angle => {
+              const hasPhoto = bodyPhotos.some(p => p.angle === angle);
+              return (
+                <button key={angle} onClick={() => setPhotoAngle(angle)}
+                  className={`flex-1 py-2 rounded-lg text-xs capitalize transition ${
+                    photoAngle === angle
+                      ? 'bg-neon-pink/20 text-neon-pink border border-neon-pink/40'
+                      : hasPhoto
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                        : 'bg-white/5 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  {hasPhoto && <Check size={10} className="inline mr-1" />}
+                  {angle}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Photo thumbnails */}
+          {bodyPhotos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {bodyPhotos.map(photo => (
+                <div key={photo.id} className="relative rounded-xl overflow-hidden aspect-[3/4] bg-white/5">
+                  <img
+                    src={`data:image/jpeg;base64,${photo.image_base64}`}
+                    alt={photo.angle}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 px-2 py-1">
+                    <span className="text-[10px] text-white capitalize">{photo.angle}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Capture button */}
+          <button onClick={() => photoInputRef.current?.click()}
+            className="w-full py-3 rounded-xl border border-dashed border-neon-pink/30 bg-neon-pink/5 text-neon-pink text-sm font-medium flex items-center justify-center gap-2 hover:bg-neon-pink/10 transition"
+          >
+            <Camera size={16} />
+            {bodyPhotos.some(p => p.angle === photoAngle)
+              ? `Retake ${photoAngle} photo`
+              : `Take ${photoAngle} photo`}
+          </button>
+          <input ref={photoInputRef} type="file" accept="image/*" capture="user" onChange={handlePhotoUpload} className="hidden" />
+
+          {/* AI Analysis button */}
+          {bodyPhotos.length > 0 && (
+            <button onClick={handleAnalyzeProgress} disabled={analyzing}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-neon-pink/20 to-neon-teal/20 border border-neon-pink/20 text-white text-sm font-medium flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+            >
+              {analyzing ? (
+                <><Loader2 size={14} className="animate-spin" /> Analyzing...</>
+              ) : (
+                <><Zap size={14} /> AI Progress Analysis</>
+              )}
+            </button>
+          )}
+
+          {/* AI Analysis result */}
+          {aiAnalysis && (
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="text-[10px] text-neon-teal font-semibold uppercase tracking-wider mb-2">APEX Analysis</div>
+              <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{aiAnalysis}</div>
+            </div>
+          )}
+
+          <p className="text-[10px] text-slate-500 text-center">
+            Take consistent photos (same lighting, pose, time of day) for the best comparison over time.
+          </p>
+        </div>
+      )}
 
       {/* Workouts section (midday + evening) */}
       {(activePeriod === 'midday' || activePeriod === 'evening') && (

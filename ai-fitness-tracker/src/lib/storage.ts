@@ -1,4 +1,4 @@
-import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry } from '../types';
+import type { UserProfile, FoodEntry, GarminData, ChatMessage, ReminderSchedule, WorkoutEntry, BodyPhoto } from '../types';
 import { DEFAULT_REMINDERS } from '../types';
 import * as db from './db';
 
@@ -13,6 +13,7 @@ const KEYS = {
   MEAL_PLAN: 'macrosnap_meal_plan',
   REMINDERS: 'macrosnap_reminders',
   REMINDER_TIMERS: 'macrosnap_reminder_timers',
+  BODY_PHOTOS: 'macrosnap_body_photos',
 } as const;
 
 function getDeviceId(): string {
@@ -297,4 +298,48 @@ export function getActiveDates(): string[] {
   const activityLog = getJSON<Record<string, GarminData>>(KEYS.ACTIVITY_LOG, {});
   const dates = new Set([...Object.keys(foodLog), ...Object.keys(activityLog)]);
   return [...dates].sort();
+}
+
+// ── Body Progress Photos ─────────────────────────────────────────
+
+export function getBodyPhotos(date?: string): BodyPhoto[] {
+  const all = getJSON<Record<string, BodyPhoto[]>>(KEYS.BODY_PHOTOS, {});
+  return all[date || todayKey()] || [];
+}
+
+export function getAllBodyPhotos(): Record<string, BodyPhoto[]> {
+  return getJSON<Record<string, BodyPhoto[]>>(KEYS.BODY_PHOTOS, {});
+}
+
+export function addBodyPhoto(photo: Omit<BodyPhoto, 'id' | 'created_at'>): BodyPhoto {
+  const all = getJSON<Record<string, BodyPhoto[]>>(KEYS.BODY_PHOTOS, {});
+  const dateKey = photo.date || todayKey();
+  if (!all[dateKey]) all[dateKey] = [];
+
+  const entry: BodyPhoto = {
+    ...photo,
+    date: dateKey,
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+  };
+
+  // Replace existing photo of same angle for that day (only one per angle per day)
+  all[dateKey] = all[dateKey].filter(p => p.angle !== photo.angle);
+  all[dateKey].push(entry);
+  setJSON(KEYS.BODY_PHOTOS, all);
+  return entry;
+}
+
+export function removeBodyPhoto(id: string, date?: string): void {
+  const all = getJSON<Record<string, BodyPhoto[]>>(KEYS.BODY_PHOTOS, {});
+  const key = date || todayKey();
+  if (all[key]) {
+    all[key] = all[key].filter(p => p.id !== id);
+    setJSON(KEYS.BODY_PHOTOS, all);
+  }
+}
+
+export function getBodyPhotoDates(): string[] {
+  const all = getJSON<Record<string, BodyPhoto[]>>(KEYS.BODY_PHOTOS, {});
+  return Object.keys(all).filter(k => all[k].length > 0).sort();
 }
