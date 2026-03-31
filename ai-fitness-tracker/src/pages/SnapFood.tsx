@@ -361,50 +361,62 @@ export function SnapFood() {
   }
 
   // Log food (from AI analysis or manual entry)
+  const [logged, setLogged] = useState(false);
+
   const logFood = (overrideData?: FoodData) => {
     const data = overrideData || foodData;
     if (!data) return;
 
-    // Detect if the user corrected the AI's estimates
-    if (!overrideData && initialFoodData && (
-      Math.abs(data.calories - initialFoodData.calories) > 20 ||
-      Math.abs(data.protein - initialFoodData.protein) > 3
-    )) {
-      const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-      addCorrection(
-        { name: initialFoodData.food_name, calories: initialFoodData.calories, protein: initialFoodData.protein, carbs: initialFoodData.carbs, fat: initialFoodData.fat },
-        { name: data.food_name, calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat },
-        lastUserMsg?.content || 'user corrected via conversation'
-      );
+    try {
+      // Detect if the user corrected the AI's estimates
+      if (!overrideData && initialFoodData && (
+        Math.abs(data.calories - initialFoodData.calories) > 20 ||
+        Math.abs(data.protein - initialFoodData.protein) > 3
+      )) {
+        const lastUserMsg = messages.filter(m => m.role === 'user').pop();
+        addCorrection(
+          { name: initialFoodData.food_name, calories: initialFoodData.calories, protein: initialFoodData.protein, carbs: initialFoodData.carbs, fat: initialFoodData.fat },
+          { name: data.food_name, calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat },
+          lastUserMsg?.content || 'user corrected via conversation'
+        );
+      }
+
+      learnFood({
+        name: data.food_name,
+        aliases: [],
+        calories: data.calories,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat,
+        fiber: data.fiber,
+        source: data.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
+        confidence: data.confidence,
+      });
+      bumpFoodFrequency(data.food_name);
+
+      addFoodEntry({
+        food_name: data.food_name,
+        description: data.description,
+        calories: data.calories,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat,
+        fiber: data.fiber,
+        meal_type: mealType,
+        ai_analysis: data.ai_analysis,
+        confidence: data.confidence,
+        image_base64: imageData || undefined,
+      }, dateParam);
+
+      // Show confirmation then navigate
+      setLogged(true);
+      setTimeout(() => {
+        navigate(dateParam ? `/?date=${dateParam}` : '/');
+      }, 800);
+    } catch (err) {
+      console.error('Failed to log food:', err);
+      setError('Failed to log food. Please try again.');
     }
-
-    learnFood({
-      name: data.food_name,
-      aliases: [],
-      calories: data.calories,
-      protein: data.protein,
-      carbs: data.carbs,
-      fat: data.fat,
-      fiber: data.fiber,
-      source: data.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
-      confidence: data.confidence,
-    });
-    bumpFoodFrequency(data.food_name);
-
-    addFoodEntry({
-      food_name: data.food_name,
-      description: data.description,
-      calories: data.calories,
-      protein: data.protein,
-      carbs: data.carbs,
-      fat: data.fat,
-      fiber: data.fiber,
-      meal_type: mealType,
-      ai_analysis: data.ai_analysis,
-      confidence: data.confidence,
-      image_base64: imageData || undefined,
-    }, dateParam);
-    navigate(dateParam ? `/?date=${dateParam}` : '/');
   };
 
   // Manual food entry
@@ -898,9 +910,14 @@ export function SnapFood() {
             {hasValidMacros && !foodData!.needs_clarification && (
               <button
                 onClick={() => logFood()}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-green-500 to-neon-teal text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition"
+                disabled={logged}
+                className={`w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition ${
+                  logged
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gradient-to-r from-green-500 to-neon-teal text-white'
+                }`}
               >
-                <Check size={18} /> Log This Meal
+                <Check size={18} /> {logged ? 'Logged! Redirecting...' : 'Log This Meal'}
               </button>
             )}
 
