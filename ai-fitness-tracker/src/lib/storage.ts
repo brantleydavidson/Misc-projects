@@ -83,6 +83,31 @@ export function removeFoodEntry(entryId: string, date?: string): FoodEntry[] {
   return log[key];
 }
 
+export function updateFoodEntry(entryId: string, updates: Partial<FoodEntry>, date?: string): FoodEntry[] {
+  const log = getJSON<Record<string, FoodEntry[]>>(KEYS.FOOD_LOG, {});
+  const key = date || todayKey();
+  log[key] = (log[key] || []).map(e =>
+    e.id === entryId ? { ...e, ...updates, id: e.id, created_at: e.created_at } : e
+  );
+  setJSON(KEYS.FOOD_LOG, log);
+  db.syncFoodEntries(key, log[key]).catch(() => {});
+  return log[key];
+}
+
+export function moveFoodEntry(entryId: string, fromDate: string, toDate: string): void {
+  const log = getJSON<Record<string, FoodEntry[]>>(KEYS.FOOD_LOG, {});
+  const entry = (log[fromDate] || []).find(e => e.id === entryId);
+  if (!entry) return;
+  // Remove from source
+  log[fromDate] = (log[fromDate] || []).filter(e => e.id !== entryId);
+  // Add to destination
+  if (!log[toDate]) log[toDate] = [];
+  log[toDate].push(entry);
+  setJSON(KEYS.FOOD_LOG, log);
+  db.syncFoodEntries(fromDate, log[fromDate]).catch(() => {});
+  db.syncFoodEntries(toDate, log[toDate]).catch(() => {});
+}
+
 // ── Water tracking (ml per day) ────────────────────────────────────
 export function getWaterIntake(date?: string): number {
   const log = getJSON<Record<string, number>>(KEYS.WATER_LOG, {});
