@@ -381,41 +381,63 @@ export function SnapFood() {
         );
       }
 
-      learnFood({
-        name: data.food_name,
-        aliases: [],
-        calories: data.calories,
-        protein: data.protein,
-        carbs: data.carbs,
-        fat: data.fat,
-        fiber: data.fiber,
-        source: data.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
-        confidence: data.confidence,
-      });
-      bumpFoodFrequency(data.food_name);
+      try {
+        learnFood({
+          name: data.food_name,
+          aliases: [],
+          calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
+          fat: data.fat,
+          fiber: data.fiber,
+          source: data.confidence >= 0.9 ? 'user_verified' : 'ai_estimate',
+          confidence: data.confidence,
+        });
+        bumpFoodFrequency(data.food_name);
+      } catch {
+        // Food memory is non-critical — continue logging
+      }
 
-      addFoodEntry({
-        food_name: data.food_name,
-        description: data.description,
-        calories: data.calories,
-        protein: data.protein,
-        carbs: data.carbs,
-        fat: data.fat,
-        fiber: data.fiber,
-        meal_type: mealType,
-        ai_analysis: data.ai_analysis,
-        confidence: data.confidence,
-        image_base64: imageData || undefined,
-      }, dateParam);
+      // Try with image first; if localStorage quota exceeded, retry without image
+      try {
+        addFoodEntry({
+          food_name: data.food_name,
+          description: data.description || '',
+          calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
+          fat: data.fat,
+          fiber: data.fiber || 0,
+          meal_type: mealType,
+          ai_analysis: data.ai_analysis || '',
+          confidence: data.confidence || 0.5,
+          image_base64: imageData || undefined,
+        }, dateParam);
+      } catch {
+        // Likely localStorage quota — retry without the image
+        addFoodEntry({
+          food_name: data.food_name,
+          description: data.description || '',
+          calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
+          fat: data.fat,
+          fiber: data.fiber || 0,
+          meal_type: mealType,
+          ai_analysis: data.ai_analysis || '',
+          confidence: data.confidence || 0.5,
+        }, dateParam);
+      }
 
       // Show confirmation then navigate
       setLogged(true);
       setTimeout(() => {
         navigate(dateParam ? `/?date=${dateParam}` : '/');
       }, 800);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to log food:', err);
-      setError('Failed to log food. Please try again.');
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to log food: ${msg}`);
     }
   };
 
