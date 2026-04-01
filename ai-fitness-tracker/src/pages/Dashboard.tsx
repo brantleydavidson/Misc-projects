@@ -120,17 +120,17 @@ export function Dashboard({ profile }: DashboardProps) {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-lg font-bold text-white font-display uppercase">{greeting}</h1>
-          <div className="flex items-center gap-2 mt-0.5">
-            <button onClick={goBack} className="text-slate-400 hover:text-neon-teal transition p-0.5">
-              <ChevronLeft size={16} />
+          <div className="flex items-center gap-1 mt-0.5">
+            <button onClick={goBack} className="text-slate-400 hover:text-neon-teal transition p-2 -ml-2">
+              <ChevronLeft size={18} />
             </button>
-            <button onClick={() => { setSelectedDate(new Date()); setSearchParams({}); }} className="text-xs text-slate-400 hover:text-white transition min-w-[100px] text-center">
+            <button onClick={() => { setSelectedDate(new Date()); setSearchParams({}); }} className="text-xs text-slate-400 hover:text-white transition min-w-[100px] text-center py-1">
               {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
             </button>
             <button onClick={goForward} disabled={currentDay}
-              className={`p-0.5 transition ${currentDay ? 'text-slate-600 cursor-default' : 'text-slate-400 hover:text-neon-teal'}`}
+              className={`p-2 transition ${currentDay ? 'text-slate-600 cursor-default' : 'text-slate-400 hover:text-neon-teal'}`}
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>

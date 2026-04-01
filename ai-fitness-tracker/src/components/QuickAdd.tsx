@@ -5,9 +5,10 @@ import { addFoodEntry } from '../lib/storage';
 
 interface QuickAddProps {
   onAdded: () => void;
+  date?: string;
 }
 
-export function QuickAdd({ onAdded }: QuickAddProps) {
+export function QuickAdd({ onAdded, date }: QuickAddProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
@@ -26,7 +27,7 @@ export function QuickAdd({ onAdded }: QuickAddProps) {
       carbs: Number(carbs) || 0,
       fat: Number(fat) || 0,
       meal_type: mealType,
-    });
+    }, date);
     setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat('');
     setOpen(false);
     onAdded();

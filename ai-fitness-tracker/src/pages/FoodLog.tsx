@@ -15,7 +15,7 @@ function formatDate(d: Date): string {
 }
 
 export function FoodLog({ profile }: FoodLogProps) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initDate = searchParams.get('date');
   const [date, setDate] = useState(() =>
     initDate ? new Date(initDate + 'T12:00:00') : new Date()
@@ -29,6 +29,15 @@ export function FoodLog({ profile }: FoodLogProps) {
 
   const dateStr = formatDate(date);
   const isToday = dateStr === formatDate(new Date());
+
+  function navigateDate(delta: number) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + delta);
+    setDate(d);
+    const key = formatDate(d);
+    if (key === formatDate(new Date())) setSearchParams({});
+    else setSearchParams({ date: key });
+  }
 
   useEffect(() => {
     refresh();
@@ -95,18 +104,18 @@ export function FoodLog({ profile }: FoodLogProps) {
     <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
       {/* Date nav */}
       <div className="flex items-center justify-between">
-        <button onClick={() => setDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; })} className="p-2 text-slate-400">
-          <ChevronLeft size={20} />
+        <button onClick={() => navigateDate(-1)} className="p-3 text-slate-400 hover:text-neon-teal transition">
+          <ChevronLeft size={22} />
         </button>
-        <div className="text-center">
+        <button onClick={() => { setDate(new Date()); setSearchParams({}); }} className="text-center py-2 px-3">
           <h1 className="text-lg font-bold text-white">
             {isToday ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
           </h1>
           <p className="text-xs text-slate-400">{summary.calories} / {targets.calories} cal</p>
-        </div>
-        <button onClick={() => setDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; })}
-          disabled={isToday} className="p-2 text-slate-400 disabled:opacity-20">
-          <ChevronRight size={20} />
+        </button>
+        <button onClick={() => navigateDate(1)}
+          disabled={isToday} className={`p-3 transition ${isToday ? 'text-slate-600 cursor-default' : 'text-slate-400 hover:text-neon-teal'}`}>
+          <ChevronRight size={22} />
         </button>
       </div>
 
@@ -120,7 +129,7 @@ export function FoodLog({ profile }: FoodLogProps) {
       </div>
 
       {/* Quick Add */}
-      <QuickAdd onAdded={refresh} />
+      <QuickAdd onAdded={refresh} date={isToday ? undefined : dateStr} />
 
       {/* Meal groups */}
       {mealGroups.map(meal => {
