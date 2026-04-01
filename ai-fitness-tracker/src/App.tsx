@@ -13,6 +13,7 @@ import { Habits } from './pages/Habits';
 import { EatOut } from './pages/EatOut';
 import { Onboarding } from './pages/Onboarding';
 import { Login } from './pages/Login';
+import { Landing } from './pages/Landing';
 import { useProfile } from './hooks/useProfile';
 import { useAuth } from './hooks/useAuth';
 import {
@@ -23,7 +24,7 @@ import { saveProfile as saveProfileToStorage } from './lib/storage';
 import { sendEmail } from './lib/api';
 import type { UserProfile } from './types';
 
-type Screen = 'login' | 'onboarding' | 'app';
+type Screen = 'landing' | 'login' | 'onboarding' | 'app';
 
 export default function App() {
   const { profile, updateProfile } = useProfile();
@@ -31,7 +32,7 @@ export default function App() {
 
   // Determine initial screen
   const [screen, setScreen] = useState<Screen>(
-    profile.onboarding_complete ? 'app' : 'login'
+    profile.onboarding_complete ? 'app' : 'landing'
   );
 
   // Register service worker + schedule notifications + initial Supabase sync
@@ -50,7 +51,7 @@ export default function App() {
   // Handle Google OAuth redirect — user comes back with a session
   useEffect(() => {
     if (authLoading || !user?.email) return;
-    if (screen !== 'login') return;
+    if (screen !== 'login' && screen !== 'landing') return;
 
     // User just authenticated via Google redirect — try to pull their profile
     (async () => {
@@ -97,11 +98,21 @@ export default function App() {
     setScreen('onboarding');
   }, []);
 
+  if (screen === 'landing') {
+    return (
+      <Landing
+        onGetStarted={handleStartOnboarding}
+        onSignIn={() => setScreen('login')}
+      />
+    );
+  }
+
   if (screen === 'login') {
     return (
       <Login
         onLoggedIn={handleLoggedIn}
         onStartOnboarding={handleStartOnboarding}
+        onBack={() => setScreen('landing')}
       />
     );
   }

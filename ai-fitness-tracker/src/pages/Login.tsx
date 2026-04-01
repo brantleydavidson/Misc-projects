@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dumbbell, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Dumbbell, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { fetchProfileByEmail, linkProfileToDevice, saveProfileEmail } from '../lib/db';
 import { saveProfile } from '../lib/storage';
@@ -8,9 +8,10 @@ import type { UserProfile } from '../types';
 interface LoginProps {
   onLoggedIn: (profile: UserProfile) => void;
   onStartOnboarding: () => void;
+  onBack?: () => void;
 }
 
-export function Login({ onLoggedIn, onStartOnboarding }: LoginProps) {
+export function Login({ onLoggedIn, onStartOnboarding, onBack }: LoginProps) {
   const { signIn, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -71,6 +72,12 @@ export function Login({ onLoggedIn, onStartOnboarding }: LoginProps) {
       <div className="absolute inset-0 scanlines" />
 
       <div className="relative z-10 w-full max-w-sm">
+        {/* Back */}
+        {onBack && (
+          <button onClick={onBack} className="flex items-center gap-1.5 text-chrome/40 hover:text-chrome transition mb-8 font-ui text-xs uppercase tracking-wider">
+            <ArrowLeft size={14} /> Back
+          </button>
+        )}
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
