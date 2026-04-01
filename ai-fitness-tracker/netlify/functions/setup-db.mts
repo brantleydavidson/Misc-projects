@@ -178,7 +178,33 @@ CREATE TABLE IF NOT EXISTS ja_discount_redemptions (
   UNIQUE(discount_code_id, device_id)
 );
 
+-- Coach memories (APEX long-term memory per user)
+CREATE TABLE IF NOT EXISTS ja_coach_memories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id uuid REFERENCES ja_profiles(id) ON DELETE CASCADE,
+  category text NOT NULL,
+  content text NOT NULL,
+  source text DEFAULT 'extracted',
+  confidence numeric DEFAULT 0.8,
+  superseded_by uuid REFERENCES ja_coach_memories(id) ON DELETE SET NULL,
+  active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Trend cache (avoid recomputing on every chat message)
+CREATE TABLE IF NOT EXISTS ja_trend_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id uuid REFERENCES ja_profiles(id) ON DELETE CASCADE UNIQUE,
+  summary_7d jsonb,
+  summary_14d jsonb,
+  summary_30d jsonb,
+  computed_at timestamptz DEFAULT now()
+);
+
 -- Indexes
+CREATE INDEX IF NOT EXISTS idx_ja_memories_profile_active ON ja_coach_memories(profile_id, active);
+CREATE INDEX IF NOT EXISTS idx_ja_memories_category ON ja_coach_memories(profile_id, category, active);
 CREATE INDEX IF NOT EXISTS idx_ja_food_profile_date ON ja_food_entries(profile_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_ja_activity_profile_date ON ja_activity_logs(profile_id, log_date);
 CREATE INDEX IF NOT EXISTS idx_ja_water_profile_date ON ja_water_logs(profile_id, log_date);
@@ -199,6 +225,8 @@ ALTER TABLE ja_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ja_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ja_discount_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ja_discount_redemptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ja_coach_memories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ja_trend_cache ENABLE ROW LEVEL SECURITY;
 
 -- Permissive policies (device-id based, no auth)
 DO $$ BEGIN
@@ -230,6 +258,12 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE POLICY "ja_discount_redemptions_all" ON ja_discount_redemptions FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "ja_coach_memories_all" ON ja_coach_memories FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "ja_trend_cache_all" ON ja_trend_cache FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Seed a launch discount code

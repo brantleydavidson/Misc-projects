@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Dumbbell, Watch, Apple, ChevronRight, ChevronDown, RotateCcw, Loader2, Footprints, Flame, Heart, Moon,
   Zap, Activity, LogOut, Settings, Sparkles, Send, Scale, Ruler, Droplets, Clock, Calendar,
-  Cloud, CheckCircle, AlertCircle, Pencil, X, Check, User,
+  Cloud, CheckCircle, AlertCircle, Pencil, X, Check, User, Brain,
 } from 'lucide-react';
+import { CoachMemories } from '../components/CoachMemories';
 import type { UserProfile, GarminData, ChatMessage } from '../types';
 import { calculateMacros, calculateWaterTarget, calculateTDEE, calculateBMR, getActivityMultiplier } from '../lib/calculations';
 import { getGarminData, saveGarminData, getDailySummary, logTargetChange, getTargetHistory } from '../lib/storage';
@@ -18,7 +19,7 @@ interface ProfileProps {
   onResetOnboarding: () => void;
 }
 
-type Section = 'stats' | 'targets' | 'settings' | 'coach' | 'health' | 'account';
+type Section = 'stats' | 'targets' | 'settings' | 'coach' | 'memory' | 'health' | 'account';
 
 // Extract profile_update JSON from AI response
 function extractProfileUpdate(text: string): Partial<UserProfile> | null {
@@ -430,6 +431,26 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
                 </button>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Coach Memory */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <button onClick={() => toggle('memory')}
+          className="w-full flex items-center justify-between p-4"
+        >
+          <div className="flex items-center gap-2">
+            <Brain size={16} className="text-electric-purple" />
+            <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Coach Memory</span>
+            <span className="text-[10px] text-slate-400 ml-1">What APEX knows about you</span>
+          </div>
+          <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'memory' ? 'rotate-180' : ''}`} />
+        </button>
+
+        {expandedSection === 'memory' && (
+          <div className="border-t border-white/10 p-4">
+            <CoachMemories />
           </div>
         )}
       </div>

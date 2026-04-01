@@ -1,5 +1,5 @@
 import { supabase, isSupabaseAvailable } from './supabase';
-import type { UserProfile, FoodEntry, GarminData, ChatMessage } from '../types';
+import type { UserProfile, FoodEntry, GarminData, ChatMessage, CoachMemory } from '../types';
 
 // Device ID for anonymous auth
 function getDeviceId(): string {
@@ -267,4 +267,57 @@ export async function performFullSync(): Promise<{ synced: boolean; error?: stri
   } catch (err: any) {
     return { synced: false, error: err.message };
   }
+}
+
+// ── Coach Memories ────────────────────────────────────────────────
+
+export async function getCoachMemories(): Promise<CoachMemory[]> {
+  if (!isSupabaseAvailable()) return [];
+  const profileId = await getProfileId();
+  if (!profileId) return [];
+
+  const { data, error } = await supabase!
+    .from('ja_coach_memories')
+    .select('*')
+    .eq('profile_id', profileId)
+    .eq('active', true)
+    .order('created_at', { ascending: true });
+
+  if (error) { console.error('Fetch memories error:', error); return []; }
+  return data || [];
+}
+
+export async function deleteCoachMemory(id: string): Promise<void> {
+  if (!isSupabaseAvailable()) return;
+  await supabase!
+    .from('ja_coach_memories')
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq('id', id);
+}
+
+export async function addCoachMemory(content: string, category: string): Promise<void> {
+  if (!isSupabaseAvailable()) return;
+  const profileId = await getProfileId();
+  if (!profileId) return;
+
+  await supabase!
+    .from('ja_coach_memories')
+    .insert({
+      profile_id: profileId,
+      category,
+      content,
+      source: 'manual',
+      confidence: 1.0,
+      active: true,
+    });
+}
+
+async function getProfileId(): Promise<string | null> {
+  const deviceId = getDeviceId();
+  const { data } = await supabase!
+    .from('ja_profiles')
+    .select('id')
+    .eq('device_id', deviceId)
+    .single();
+  return data?.id || null;
 }

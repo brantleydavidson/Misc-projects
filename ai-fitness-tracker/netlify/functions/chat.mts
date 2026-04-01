@@ -5,6 +5,8 @@ import {
   checkUsage, recordUsage, usageLimitResponse,
   sanitizeString,
 } from "./shared/utils.ts";
+import { fetchActiveMemories, formatMemoriesForPrompt, extractMemories } from "./shared/memory.ts";
+import { getCachedOrComputeTrends } from "./shared/trends.ts";
 
 export default async (req: Request, _context: Context) => {
   const cors = handleCors(req);
@@ -36,6 +38,36 @@ export default async (req: Request, _context: Context) => {
       const usage = await checkUsage(deviceId, 'coach_message', supabaseUrl, supabaseKey);
       if (!usage.allowed) {
         return usageLimitResponse(usage.used, usage.limit, usage.tier, origin);
+      }
+    }
+
+    // Resolve profile_id from device_id for memory/trends queries
+    let profileId: string | null = null;
+    let memoriesBlock = '';
+    let trendsBlock = '';
+    let insightsBlock = '';
+
+    if (supabaseUrl && supabaseKey && deviceId !== 'unknown') {
+      try {
+        const profileRes = await fetch(
+          `${supabaseUrl}/rest/v1/ja_profiles?device_id=eq.${encodeURIComponent(deviceId)}&select=id&limit=1`,
+          { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
+        );
+        if (profileRes.ok) {
+          const rows = await profileRes.json();
+          if (rows.length > 0) profileId = rows[0].id;
+        }
+      } catch { /* non-critical */ }
+
+      if (profileId) {
+        // Fetch memories and trends in parallel
+        const [memories, trendData] = await Promise.all([
+          fetchActiveMemories(profileId, supabaseUrl, supabaseKey).catch(() => []),
+          getCachedOrComputeTrends(profileId, profile || {}, supabaseUrl, supabaseKey).catch(() => ({ trends: '', insights: '' })),
+        ]);
+        memoriesBlock = formatMemoriesForPrompt(memories);
+        trendsBlock = trendData.trends;
+        insightsBlock = trendData.insights;
       }
     }
 
@@ -103,6 +135,10 @@ ${profileSummary}${supplementInfo}${peptideInfo}${healthNotes}
 ${todaySummary}
 ${garminSummary}
 ${targetHistorySummary}
+${memoriesBlock}
+${trendsBlock}
+${insightsBlock}
+
 RULES:
 - Always consider their real-time intake data when giving advice
 - Be specific to THEIR situation — reference their actual numbers, not generic advice
@@ -203,6 +239,23 @@ You always:
     // Record usage
     if (supabaseUrl && supabaseKey) {
       recordUsage(deviceId, 'coach_message', supabaseUrl, supabaseKey).catch(() => {});
+    }
+
+    // Fire-and-forget: extract memories from this conversation exchange
+    if (profileId && supabaseUrl && supabaseKey && apiKey) {
+      const lastUserMsg = [...(messages || [])].reverse().find((m: any) => m.role === 'user');
+      if (lastUserMsg) {
+        const existingMemories = await fetchActiveMemories(profileId, supabaseUrl, supabaseKey).catch(() => []);
+        extractMemories(
+          lastUserMsg.content,
+          text,
+          existingMemories,
+          profileId,
+          supabaseUrl,
+          supabaseKey,
+          apiKey,
+        ).catch(() => {}); // non-blocking, non-critical
+      }
     }
 
     return jsonResponse({ message: text }, 200, origin);

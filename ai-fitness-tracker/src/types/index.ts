@@ -79,6 +79,18 @@ export interface TargetChangeEntry {
   previous: Partial<Pick<UserProfile, 'calorie_target' | 'protein_target' | 'carb_target' | 'fat_target' | 'water_target_liters'>>;
 }
 
+export interface CoachMemory {
+  id: string;
+  profile_id: string;
+  category: 'preference' | 'injury' | 'goal' | 'life_context' | 'pattern' | 'dislike' | 'note';
+  content: string;
+  source: 'extracted' | 'onboarding' | 'manual';
+  confidence: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FoodEntry {
   id?: string;
   profile_id?: string;
