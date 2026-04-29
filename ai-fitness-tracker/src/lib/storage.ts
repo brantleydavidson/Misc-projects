@@ -19,7 +19,7 @@ const KEYS = {
   TARGET_HISTORY: 'jackedai_target_history',
 } as const;
 
-function getDeviceId(): string {
+export function getDeviceId(): string {
   let id = localStorage.getItem(KEYS.DEVICE_ID);
   if (!id) {
     id = crypto.randomUUID();

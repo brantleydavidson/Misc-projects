@@ -96,14 +96,68 @@ TODAY'S INTAKE SO FAR:
 - Meals logged: ${context.todaySummary.entries?.length || 0}
 ` : "";
 
-    const garminSummary = context?.garminData ? `
-GARMIN/HEALTH DATA:
-- Steps: ${context.garminData.steps || "no data"}
-- Calories Burned: ${context.garminData.calories_burned || "no data"}
-- Resting HR: ${context.garminData.heart_rate_resting || "no data"}
-- Sleep: ${context.garminData.sleep_hours || "no data"}hrs
-- Body Battery: ${context.garminData.body_battery || "no data"}
-` : "";
+    // Fetch real-time health data from Open Wearables if configured
+    let healthBlock = '';
+    const owUrl = getEnv('OPEN_WEARABLES_URL');
+    const owKey = getEnv('OPEN_WEARABLES_API_KEY');
+    if (owUrl && owKey && profileId && supabaseUrl && supabaseKey) {
+      try {
+        const profRes = await fetch(
+          `${supabaseUrl}/rest/v1/ja_profiles?id=eq.${profileId}&select=ow_user_id&limit=1`,
+          { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
+        );
+        const profRows = await profRes.json();
+        const owUserId = profRows?.[0]?.ow_user_id;
+        if (owUserId) {
+          const today = new Date().toISOString().split('T')[0];
+          const headers = { 'X-Open-Wearables-API-Key': owKey, 'Content-Type': 'application/json' };
+          const [actRes, sleepRes, scoresRes] = await Promise.all([
+            fetch(`${owUrl}/api/v1/users/${owUserId}/summaries/activity?start_date=${today}&end_date=${today}`, { headers }).catch(() => null),
+            fetch(`${owUrl}/api/v1/users/${owUserId}/summaries/sleep?start_date=${today}&end_date=${today}`, { headers }).catch(() => null),
+            fetch(`${owUrl}/api/v1/users/${owUserId}/health-scores?start_date=${today}&end_date=${today}`, { headers }).catch(() => null),
+          ]);
+          const activity = actRes?.ok ? await actRes.json() : null;
+          const sleep = sleepRes?.ok ? await sleepRes.json() : null;
+          const scores = scoresRes?.ok ? await scoresRes.json() : null;
+
+          const lines: string[] = ['REAL-TIME BIOMETRIC DATA (from Garmin):'];
+          const a = Array.isArray(activity) ? activity[0] : activity;
+          if (a) {
+            if (a.steps != null) lines.push(`- Steps: ${a.steps}`);
+            if (a.calories_active != null) lines.push(`- Active Calories Burned: ${a.calories_active}`);
+            if (a.heart_rate_resting != null) lines.push(`- Resting Heart Rate: ${a.heart_rate_resting} bpm`);
+            if (a.heart_rate_avg != null) lines.push(`- Average Heart Rate: ${a.heart_rate_avg} bpm`);
+            if (a.active_minutes != null) lines.push(`- Active Minutes: ${a.active_minutes}`);
+          }
+          const s = Array.isArray(sleep) ? sleep[0] : sleep;
+          if (s) {
+            if (s.duration_hours != null) lines.push(`- Sleep Duration: ${s.duration_hours}hrs`);
+            if (s.score != null) lines.push(`- Sleep Score: ${s.score}/100`);
+            if (s.stages) lines.push(`- Sleep Stages: ${s.stages.deep || 0}hr deep, ${s.stages.rem || 0}hr REM, ${s.stages.light || 0}hr light, ${s.stages.awake || 0}hr awake`);
+          }
+          const scoreList = Array.isArray(scores) ? scores : scores?.data || [];
+          for (const sc of scoreList) {
+            if (sc.category === 'body_battery') lines.push(`- Body Battery: ${sc.value}/100`);
+            if (sc.category === 'stress') lines.push(`- Stress Level: ${sc.value}/100`);
+            if (sc.category === 'recovery') lines.push(`- Recovery Score: ${sc.value}/100`);
+          }
+          if (lines.length > 1) healthBlock = lines.join('\n') + '\n';
+        }
+      } catch { /* non-critical — degrade gracefully */ }
+    }
+
+    // Fallback to frontend-provided garmin data if OW not available
+    if (!healthBlock && context?.garminData) {
+      const g = context.garminData;
+      const lines: string[] = ['GARMIN/HEALTH DATA (manual entry):'];
+      if (g.steps) lines.push(`- Steps: ${g.steps}`);
+      if (g.calories_burned) lines.push(`- Calories Burned: ${g.calories_burned}`);
+      if (g.heart_rate_resting) lines.push(`- Resting HR: ${g.heart_rate_resting}`);
+      if (g.sleep_hours) lines.push(`- Sleep: ${g.sleep_hours}hrs`);
+      if (g.body_battery) lines.push(`- Body Battery: ${g.body_battery}`);
+      if (g.stress_level) lines.push(`- Stress: ${g.stress_level}`);
+      if (lines.length > 1) healthBlock = lines.join('\n') + '\n';
+    }
 
     const targetHistorySummary = context?.targetHistory?.length ? `
 TARGET CHANGE HISTORY (most recent changes):
@@ -133,7 +187,7 @@ TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
 
 ${profileSummary}${supplementInfo}${peptideInfo}${healthNotes}
 ${todaySummary}
-${garminSummary}
+${healthBlock}
 ${targetHistorySummary}
 ${memoriesBlock}
 ${trendsBlock}
@@ -144,7 +198,13 @@ RULES:
 - Be specific to THEIR situation — reference their actual numbers, not generic advice
 - If they ask what to eat, consider what they've already eaten today and what macros they still need
 - Keep responses concise but helpful (2-4 paragraphs max unless they ask for detail)
-- Use their Garmin/health data to inform recommendations (e.g., if they burned a lot, they might need more fuel)
+- Use their real-time biometric data to inform recommendations:
+  - Low Body Battery (<30): suggest easy-prep, high-protein meals — user is drained
+  - High Stress (>60): comfort food options that still hit macros, avoid complex cooking
+  - Poor Sleep (<6hrs or low score): emphasize recovery nutrition — magnesium-rich foods, avoid late caffeine
+  - High Active Calories: they may need more fuel — suggest adding a protein-rich snack
+  - Low HRV: recovery day nutrition — anti-inflammatory foods, adequate hydration
+- When biometric data contradicts what the user says ("I feel fine" but Body Battery is 15), gently flag it
 - Prioritize protein for muscle preservation during cuts
 - Be honest but encouraging — no false promises
 - If they share a food photo, analyze it and estimate macros

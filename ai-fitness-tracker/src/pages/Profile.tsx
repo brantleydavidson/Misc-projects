@@ -5,6 +5,7 @@ import {
   Cloud, CheckCircle, AlertCircle, Pencil, X, Check, User, Brain,
 } from 'lucide-react';
 import { CoachMemories } from '../components/CoachMemories';
+import { GarminConnect } from '../components/GarminConnect';
 import type { UserProfile, GarminData, ChatMessage } from '../types';
 import { calculateMacros, calculateWaterTarget, calculateTDEE, calculateBMR, getActivityMultiplier } from '../lib/calculations';
 import { getGarminData, saveGarminData, getDailySummary, logTargetChange, getTargetHistory } from '../lib/storage';
@@ -19,7 +20,7 @@ interface ProfileProps {
   onResetOnboarding: () => void;
 }
 
-type Section = 'stats' | 'targets' | 'settings' | 'coach' | 'memory' | 'health' | 'account';
+type Section = 'stats' | 'targets' | 'settings' | 'coach' | 'memory' | 'wearable' | 'health' | 'account';
 
 // Extract profile_update JSON from AI response
 function extractProfileUpdate(text: string): Partial<UserProfile> | null {
@@ -451,6 +452,26 @@ export function Profile({ profile, onUpdate, onResetOnboarding }: ProfileProps) 
         {expandedSection === 'memory' && (
           <div className="border-t border-white/10 p-4">
             <CoachMemories />
+          </div>
+        )}
+      </div>
+
+      {/* Wearable Connection */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <button onClick={() => toggle('wearable')}
+          className="w-full flex items-center justify-between p-4"
+        >
+          <div className="flex items-center gap-2">
+            <Watch size={16} className="text-neon-teal" />
+            <span className="text-sm font-semibold text-white font-ui uppercase tracking-wider">Wearable</span>
+            <span className="text-[10px] text-slate-400 ml-1">Garmin sync</span>
+          </div>
+          <ChevronDown size={16} className={`text-slate-500 transition-transform ${expandedSection === 'wearable' ? 'rotate-180' : ''}`} />
+        </button>
+
+        {expandedSection === 'wearable' && (
+          <div className="border-t border-white/10 p-4">
+            <GarminConnect />
           </div>
         )}
       </div>

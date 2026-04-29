@@ -7,7 +7,10 @@ import {
 } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
+import { HealthMetrics } from '../components/HealthMetrics';
 import type { UserProfile, BodyPhoto } from '../types';
+import type { HealthSnapshot } from '../types/health';
+import { getHealthSnapshot } from '../lib/health';
 import { getDailySummary, getActivityData, addWater, getWaterIntake, getCheckInStatus, getBodyPhotoDates, getAllBodyPhotos, getHabits, toggleHabit, isHabitComplete, getHabitStreak, getDailyHabitSummary } from '../lib/storage';
 import { displayWater, displayWaterTarget, waterIncrements, displayWeight, displayWeightValue, weightUnit } from '../lib/units';
 import {
@@ -55,6 +58,8 @@ export function Dashboard({ profile }: DashboardProps) {
 
   const [data, setData] = useState(refreshData);
   const [notifPerm, setNotifPerm] = useState(getNotificationPermission());
+  const [healthSnapshot, setHealthSnapshot] = useState<HealthSnapshot | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
 
   useEffect(() => {
     setData(refreshData());
@@ -62,6 +67,12 @@ export function Dashboard({ profile }: DashboardProps) {
     const interval = setInterval(() => setData(refreshData()), 3000);
     return () => clearInterval(interval);
   }, [refreshData, currentDay]);
+
+  useEffect(() => {
+    if (!currentDay) { setHealthLoading(false); setHealthSnapshot(null); return; }
+    setHealthLoading(true);
+    getHealthSnapshot().then(s => setHealthSnapshot(s)).catch(() => setHealthSnapshot(null)).finally(() => setHealthLoading(false));
+  }, [currentDay]);
 
   const { summary, activity, water, checkIns } = data;
 
@@ -383,6 +394,9 @@ export function Dashboard({ profile }: DashboardProps) {
           </button>
         )}
       </div>
+
+      {/* Biometrics (Garmin / Open Wearables) */}
+      {currentDay && <HealthMetrics snapshot={healthSnapshot} loading={healthLoading} />}
 
       {/* Progress Insights */}
       <ProgressInsights navigate={navigate} profile={profile} />
