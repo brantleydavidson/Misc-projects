@@ -20,7 +20,7 @@ export function corsHeaders(origin?: string | null): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': allowed ? origin! : ALLOWED_ORIGINS[0],
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Device-Id',
     'Access-Control-Max-Age': '86400',
     'X-Content-Type-Options': 'nosniff',

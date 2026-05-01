@@ -96,50 +96,52 @@ TODAY'S INTAKE SO FAR:
 - Meals logged: ${context.todaySummary.entries?.length || 0}
 ` : "";
 
-    // Fetch real-time health data from Open Wearables if configured
+    // Fetch real-time health data from Terra if configured
     let healthBlock = '';
-    const owUrl = getEnv('OPEN_WEARABLES_URL');
-    const owKey = getEnv('OPEN_WEARABLES_API_KEY');
-    if (owUrl && owKey && profileId && supabaseUrl && supabaseKey) {
+    const terraApiKey = getEnv('TERRA_API_KEY');
+    const terraDevId = getEnv('TERRA_DEV_ID');
+    if (terraApiKey && terraDevId && profileId && supabaseUrl && supabaseKey) {
       try {
         const profRes = await fetch(
-          `${supabaseUrl}/rest/v1/ja_profiles?id=eq.${profileId}&select=ow_user_id&limit=1`,
+          `${supabaseUrl}/rest/v1/ja_profiles?id=eq.${profileId}&select=terra_user_id&limit=1`,
           { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
         );
         const profRows = await profRes.json();
-        const owUserId = profRows?.[0]?.ow_user_id;
-        if (owUserId) {
+        const terraUserId = profRows?.[0]?.terra_user_id;
+        if (terraUserId) {
           const today = new Date().toISOString().split('T')[0];
-          const headers = { 'X-Open-Wearables-API-Key': owKey, 'Content-Type': 'application/json' };
-          const [actRes, sleepRes, scoresRes] = await Promise.all([
-            fetch(`${owUrl}/api/v1/users/${owUserId}/summaries/activity?start_date=${today}&end_date=${today}`, { headers }).catch(() => null),
-            fetch(`${owUrl}/api/v1/users/${owUserId}/summaries/sleep?start_date=${today}&end_date=${today}`, { headers }).catch(() => null),
-            fetch(`${owUrl}/api/v1/users/${owUserId}/health-scores?start_date=${today}&end_date=${today}`, { headers }).catch(() => null),
+          const terraHeaders = { 'dev-id': terraDevId, 'x-api-key': terraApiKey, 'Content-Type': 'application/json' };
+          const baseParams = `user_id=${encodeURIComponent(terraUserId)}&start_date=${today}&end_date=${today}&to_webhook=false`;
+          const [dailyRes, sleepRes] = await Promise.all([
+            fetch(`https://api.tryterra.co/v2/daily?${baseParams}&with_samples=false`, { headers: terraHeaders }).catch(() => null),
+            fetch(`https://api.tryterra.co/v2/sleep?${baseParams}`, { headers: terraHeaders }).catch(() => null),
           ]);
-          const activity = actRes?.ok ? await actRes.json() : null;
-          const sleep = sleepRes?.ok ? await sleepRes.json() : null;
-          const scores = scoresRes?.ok ? await scoresRes.json() : null;
+          const dailyJson = dailyRes?.ok ? await dailyRes.json() : null;
+          const sleepJson = sleepRes?.ok ? await sleepRes.json() : null;
+          const daily = dailyJson?.data?.[0] || null;
+          const sleep = sleepJson?.data?.[0] || null;
 
-          const lines: string[] = ['REAL-TIME BIOMETRIC DATA (from Garmin):'];
-          const a = Array.isArray(activity) ? activity[0] : activity;
-          if (a) {
-            if (a.steps != null) lines.push(`- Steps: ${a.steps}`);
-            if (a.calories_active != null) lines.push(`- Active Calories Burned: ${a.calories_active}`);
-            if (a.heart_rate_resting != null) lines.push(`- Resting Heart Rate: ${a.heart_rate_resting} bpm`);
-            if (a.heart_rate_avg != null) lines.push(`- Average Heart Rate: ${a.heart_rate_avg} bpm`);
-            if (a.active_minutes != null) lines.push(`- Active Minutes: ${a.active_minutes}`);
+          const lines: string[] = ['REAL-TIME BIOMETRIC DATA (from Garmin via Terra):'];
+          if (daily) {
+            if (daily.distance_data?.steps != null) lines.push(`- Steps: ${daily.distance_data.steps}`);
+            if (daily.calories_data?.net_activity_calories != null) lines.push(`- Active Calories Burned: ${daily.calories_data.net_activity_calories}`);
+            if (daily.heart_rate_data?.summary?.resting_hr_bpm != null) lines.push(`- Resting Heart Rate: ${daily.heart_rate_data.summary.resting_hr_bpm} bpm`);
+            if (daily.heart_rate_data?.summary?.avg_hr_bpm != null) lines.push(`- Average Heart Rate: ${daily.heart_rate_data.summary.avg_hr_bpm} bpm`);
+            if (daily.stress_data?.avg_stress_level != null) lines.push(`- Stress Level: ${daily.stress_data.avg_stress_level}/100`);
+            if (daily.device_data?.other_devices?.[0]?.body_battery_level != null) lines.push(`- Body Battery: ${daily.device_data.other_devices[0].body_battery_level}/100`);
+            if (daily.heart_rate_data?.summary?.hrv_rmssd != null) lines.push(`- HRV (RMSSD): ${daily.heart_rate_data.summary.hrv_rmssd}ms`);
           }
-          const s = Array.isArray(sleep) ? sleep[0] : sleep;
-          if (s) {
-            if (s.duration_hours != null) lines.push(`- Sleep Duration: ${s.duration_hours}hrs`);
-            if (s.score != null) lines.push(`- Sleep Score: ${s.score}/100`);
-            if (s.stages) lines.push(`- Sleep Stages: ${s.stages.deep || 0}hr deep, ${s.stages.rem || 0}hr REM, ${s.stages.light || 0}hr light, ${s.stages.awake || 0}hr awake`);
-          }
-          const scoreList = Array.isArray(scores) ? scores : scores?.data || [];
-          for (const sc of scoreList) {
-            if (sc.category === 'body_battery') lines.push(`- Body Battery: ${sc.value}/100`);
-            if (sc.category === 'stress') lines.push(`- Stress Level: ${sc.value}/100`);
-            if (sc.category === 'recovery') lines.push(`- Recovery Score: ${sc.value}/100`);
+          if (sleep) {
+            const asleep = sleep.sleep_durations_data?.asleep || {};
+            const lightSec = asleep.duration_light_sleep_state_seconds || 0;
+            const deepSec = asleep.duration_deep_sleep_state_seconds || 0;
+            const remSec = asleep.duration_REM_sleep_state_seconds || 0;
+            const totalHrs = Math.round(((lightSec + deepSec + remSec) / 3600) * 10) / 10;
+            if (totalHrs > 0) lines.push(`- Sleep Duration: ${totalHrs}hrs`);
+            if (sleep.sleep_quality_score_data?.sleep_quality_score != null) lines.push(`- Sleep Score: ${sleep.sleep_quality_score_data.sleep_quality_score}/100`);
+            if (deepSec > 0 || remSec > 0) {
+              lines.push(`- Sleep Stages: ${Math.round(deepSec/3600*10)/10}hr deep, ${Math.round(remSec/3600*10)/10}hr REM, ${Math.round(lightSec/3600*10)/10}hr light`);
+            }
           }
           if (lines.length > 1) healthBlock = lines.join('\n') + '\n';
         }

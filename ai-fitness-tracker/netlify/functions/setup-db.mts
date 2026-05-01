@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS ja_profiles (
   meal_window_end text DEFAULT '20:00',
   weekly_weigh_in_day integer DEFAULT 1,
   display_theme text DEFAULT 'dark',
-  ow_user_id text,
+  terra_user_id text,
   onboarding_complete boolean DEFAULT false,
   notifications_enabled boolean DEFAULT false,
   notify_morning text DEFAULT '07:00',
