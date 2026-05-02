@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Dumbbell, Send, Zap, ChevronRight, Mail, Lock, Eye, EyeOff, Loader2, Activity } from 'lucide-react';
+import { Dumbbell, Send, Zap, ChevronRight, Mail, Lock, Eye, EyeOff, Loader2, Activity, Check, X as XIcon } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { sendOnboarding, initTerraWidget, buildHealthBaseline, onboardingAgent, type HealthBaseline } from '../lib/api';
 import { calculateMacros, calculateWaterTarget, calculateBMR, calculateTDEE } from '../lib/calculations';
@@ -12,7 +12,7 @@ interface OnboardingProps {
   initialPhase?: Phase;
 }
 
-export type Phase = 'arrival' | 'connect' | 'analyzing' | 'conversation' | 'auth' | 'reveal' | 'commit';
+export type Phase = 'arrival' | 'connect' | 'analyzing' | 'confirm' | 'conversation' | 'auth' | 'reveal' | 'commit';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -113,7 +113,7 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
     setPhase('conversation');
   }, []);
 
-  // Analyzing phase — fetch baseline, advance to conversation
+  // Analyzing phase — fetch baseline, then advance to confirm (or fall back to scripted)
   useEffect(() => {
     if (phase !== 'analyzing') return;
     let cancelled = false;
@@ -126,9 +126,18 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
       try {
         const result = await buildHealthBaseline();
         if (cancelled) return;
+        const dq = result.baseline?.data_quality;
+        const usableDays = (dq?.days_with_sleep ?? 0) + (dq?.days_with_workouts ?? 0) + (dq?.days_with_hrv ?? 0);
+        if (result.days_with_data === 0 || usableDays === 0) {
+          // Tracker connected but no data flowed through (common with Apple Health
+          // on web — needs the iOS SDK). Skip to scripted onboarding.
+          setAnalyzeError("No data from your tracker yet — falling back to a manual intake.");
+          setTimeout(() => !cancelled && setPhase('conversation'), 1500);
+          return;
+        }
         setBaseline(result.baseline);
-        // Brief pause so the user reads the analyzing animation
-        setTimeout(() => !cancelled && setPhase('conversation'), 800);
+        // Brief pause so the user reads the animation, then show the read-back
+        setTimeout(() => !cancelled && setPhase('confirm'), 800);
       } catch (err: any) {
         if (cancelled) return;
         setAnalyzeError(err?.message || 'Could not analyze data');
@@ -140,6 +149,25 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
       stepTimers.forEach(clearTimeout);
     };
   }, [phase]);
+
+  const [correction, setCorrection] = useState('');
+  const [showCorrection, setShowCorrection] = useState(false);
+
+  const handleConfirmYes = useCallback(() => {
+    setPhase('conversation');
+  }, []);
+
+  const handleConfirmCorrect = useCallback(() => {
+    if (!correction.trim()) {
+      setShowCorrection(true);
+      return;
+    }
+    // Seed the conversation with the user's correction so the agent
+    // incorporates it via mark_known on the next turn.
+    setMessages([{ role: 'user', content: correction.trim() }]);
+    setCorrection('');
+    setPhase('conversation');
+  }, [correction]);
 
   // Parse user message to extract structured data
   function extractData(userMsg: string, currentTurn: number): Partial<UserProfile> {
@@ -287,20 +315,21 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
     if (phase !== 'conversation' || !agenticMode || agenticKickoffRef.current) return;
     agenticKickoffRef.current = true;
     setLoading(true);
-    onboardingAgent([])
+    // If the user pre-seeded a correction in the confirm phase, send it.
+    const seed = messages.length > 0 ? messages.map(m => ({ role: m.role, content: m.content })) : [];
+    onboardingAgent(seed)
       .then(reply => {
-        setMessages([{ role: 'assistant', content: reply.message }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: reply.message }]);
         if (reply.done) {
-          // Edge case: agent finishes without asking
           setPhase('reveal');
         }
       })
       .catch(err => {
         console.error('[onboarding-agent kickoff]', err);
-        setMessages([{ role: 'assistant', content: "Tell me your name and what brings you here." }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: "Tell me your name and what brings you here." }]);
       })
       .finally(() => setLoading(false));
-  }, [phase, agenticMode]);
+  }, [phase, agenticMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSend(text?: string) {
     const msg = text || input.trim();
@@ -538,6 +567,113 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
           {analyzeError && (
             <p className="mt-6 text-neon-pink/80 text-xs font-ui">{analyzeError} — continuing without data.</p>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PHASE: CONFIRM (read-back of baseline) ──────────────
+  if (phase === 'confirm' && baseline) {
+    const m = baseline.metrics || {};
+    const facts: { label: string; value: string }[] = [];
+    if (m.avg_sleep_minutes) facts.push({ label: 'Sleep', value: `${(Math.round((m.avg_sleep_minutes as number) / 60 * 10) / 10)}h avg` });
+    if (m.avg_resting_hr) facts.push({ label: 'Resting HR', value: `${Math.round(m.avg_resting_hr as number)} bpm` });
+    if (m.avg_hrv) facts.push({ label: 'HRV', value: `${Math.round(m.avg_hrv as number)} ms` });
+    if (m.avg_steps) facts.push({ label: 'Steps', value: `${Math.round(m.avg_steps as number).toLocaleString()}/day` });
+    if (m.avg_active_calories) facts.push({ label: 'Active', value: `${Math.round(m.avg_active_calories as number)} kcal` });
+    if (baseline.estimated_tdee) facts.push({ label: 'Est. TDEE', value: `${baseline.estimated_tdee} kcal` });
+
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col relative overflow-hidden">
+        <div className="absolute inset-0 grid-bg opacity-20" />
+        <div className="absolute inset-0 scanlines" />
+        <div className="relative z-10 flex-1 overflow-y-auto px-6 py-8">
+          <div className="max-w-md mx-auto fade-up">
+            <div className="text-center mb-8">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
+                <Activity size={24} className="text-white" />
+              </div>
+              <h1 className="font-display text-xl text-neon-teal glow-text uppercase tracking-wider">
+                Here's What I See
+              </h1>
+              <p className="font-ui text-xs text-chrome/40 mt-2 tracking-widest uppercase">
+                Last {baseline.window_days || 30} days
+              </p>
+            </div>
+
+            {/* Summary */}
+            <div className="rounded-2xl border border-neon-teal/20 bg-neon-teal/5 p-4 mb-5">
+              <p className="font-ui text-sm text-chrome/90 leading-relaxed italic">
+                {baseline.summary}
+              </p>
+            </div>
+
+            {/* Facts */}
+            {facts.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mb-5">
+                {facts.map((f, i) => (
+                  <div key={i} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="font-ui text-[10px] text-chrome/40 uppercase tracking-widest mb-1">{f.label}</div>
+                    <div className="font-display text-base text-chrome">{f.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Patterns */}
+            {baseline.patterns && baseline.patterns.length > 0 && (
+              <div className="mb-6">
+                <div className="font-ui text-[10px] text-chrome/40 uppercase tracking-widest mb-2">What I'm noticing</div>
+                <div className="space-y-1.5">
+                  {baseline.patterns.slice(0, 4).map((p, i) => (
+                    <div key={i} className="flex items-start gap-2 font-ui text-sm text-chrome/80 leading-relaxed">
+                      <span className="text-neon-pink mt-1">·</span>
+                      <span>{p}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Correction textarea (lazy-shown) */}
+            {showCorrection && (
+              <div className="mb-5">
+                <label className="font-ui text-[10px] text-chrome/40 uppercase tracking-widest mb-2 block">
+                  What's off? Tell me in your own words.
+                </label>
+                <textarea
+                  value={correction}
+                  onChange={e => setCorrection(e.target.value)}
+                  placeholder="e.g. The HRV looks low because I was sick last week. I usually train 4–5x a week, not 2."
+                  rows={4}
+                  className="w-full bg-white/5 rounded-xl px-4 py-3 text-chrome text-sm placeholder-chrome/30 border border-white/10 focus:border-neon-teal/50 focus:outline-none font-ui resize-none"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* CTAs */}
+            <div className="space-y-3">
+              <button
+                onClick={handleConfirmYes}
+                className="w-full py-4 rounded-xl font-ui font-semibold text-sm uppercase tracking-wider
+                  bg-gradient-to-r from-neon-teal to-neon-pink text-white
+                  transition btn-neon flex items-center justify-center gap-2"
+              >
+                <Check size={16} />
+                That's Right — Let's Build It
+              </button>
+              <button
+                onClick={handleConfirmCorrect}
+                className="w-full py-3 rounded-xl font-ui text-xs text-chrome/60 hover:text-chrome border border-white/10 bg-white/5 hover:bg-white/10 transition uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                <XIcon size={14} />
+                {showCorrection
+                  ? (correction.trim() ? 'Send Correction' : 'Type your correction above')
+                  : 'Some Things Are Off'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
