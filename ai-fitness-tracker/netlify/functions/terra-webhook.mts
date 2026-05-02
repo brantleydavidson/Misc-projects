@@ -107,12 +107,21 @@ export default async (req: Request, _context: Context) => {
           return jsonResponse({ status: 'ignored', reason: 'missing user fields for auth' }, 200);
         }
 
-        // Store terra_user_id in ja_profiles for this device
-        await supabasePatch(
-          'ja_profiles',
-          `device_id=eq.${encodeURIComponent(user.reference_id)}`,
-          { terra_user_id: user.user_id }
-        );
+        // Upsert — guarantees terra_user_id lands somewhere even if the profile
+        // wasn't pre-created (e.g. user came via a path that skipped terra-init).
+        await fetch(`${SUPABASE_URL()}/rest/v1/ja_profiles?on_conflict=device_id`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_KEY(),
+            Authorization: `Bearer ${SUPABASE_KEY()}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+          },
+          body: JSON.stringify({
+            device_id: user.reference_id,
+            terra_user_id: user.user_id,
+          }),
+        });
 
         return jsonResponse({ status: 'ok', event: 'auth', reference_id: user.reference_id }, 200);
       }

@@ -31,8 +31,32 @@ export default async (req: Request, _context: Context) => {
     return errorResponse("Terra not configured", 503, origin);
 
   try {
-    const { device_id, redirect_path, providers } = await req.json();
+    const { device_id, redirect_path, providers, email } = await req.json();
     if (!device_id) return errorResponse("device_id required", 400, origin);
+
+    // Ensure a ja_profiles row exists for this device_id BEFORE Terra authenticates.
+    // Without this, the auth webhook arrives with a reference_id that has no profile
+    // to update, terra_user_id is never stored, and health-baseline can't run.
+    const supabaseUrl = getEnv("SUPABASE_URL");
+    const supabaseKey = getEnv("SUPABASE_SERVICE_KEY") || getEnv("SUPABASE_ANON_KEY");
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const upsertBody: Record<string, unknown> = { device_id };
+        if (email) upsertBody.email = email;
+        await fetch(`${supabaseUrl}/rest/v1/ja_profiles?on_conflict=device_id`, {
+          method: "POST",
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(upsertBody),
+        });
+      } catch (err) {
+        console.warn("[terra-init] profile upsert failed", err);
+      }
+    }
 
     const redirectOrigin = origin || "https://bejacked.ai";
     const path = redirect_path || "/?terra=connected";

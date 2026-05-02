@@ -300,17 +300,19 @@ export default async (req: Request, _context: Context) => {
         origin,
       );
 
-    // 2. Pull 30d range from Terra (parallel)
+    // 2. Pull 14d range from Terra (parallel). Smaller window keeps us under
+    // Netlify's 10s function timeout — Terra's payloads can hit several MB
+    // even with with_samples=false.
     const end = new Date();
     const start = new Date();
-    start.setDate(start.getDate() - 30);
+    start.setDate(start.getDate() - 14);
     const startStr = start.toISOString().split("T")[0];
     const endStr = end.toISOString().split("T")[0];
 
-    const baseParams = `user_id=${encodeURIComponent(profile.terra_user_id)}&start_date=${startStr}&end_date=${endStr}&to_webhook=false`;
+    const baseParams = `user_id=${encodeURIComponent(profile.terra_user_id)}&start_date=${startStr}&end_date=${endStr}&to_webhook=false&with_samples=false`;
 
     const [dailyRes, sleepRes, bodyRes] = await Promise.allSettled([
-      terra(`/daily?${baseParams}&with_samples=false`),
+      terra(`/daily?${baseParams}`),
       terra(`/sleep?${baseParams}`),
       terra(`/body?${baseParams}`),
     ]);
