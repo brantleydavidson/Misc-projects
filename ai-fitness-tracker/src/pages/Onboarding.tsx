@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Dumbbell, Send, Zap, ChevronRight, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Dumbbell, Send, Zap, ChevronRight, Mail, Lock, Eye, EyeOff, Loader2, Activity } from 'lucide-react';
 import type { UserProfile } from '../types';
-import { sendOnboarding } from '../lib/api';
+import { sendOnboarding, initTerraWidget, buildHealthBaseline, type HealthBaseline } from '../lib/api';
 import { calculateMacros, calculateWaterTarget, calculateBMR, calculateTDEE } from '../lib/calculations';
 import { useAuth } from '../hooks/useAuth';
 
@@ -9,9 +9,10 @@ interface OnboardingProps {
   profile: UserProfile;
   onUpdate: (data: Partial<UserProfile>) => void;
   onComplete: () => void;
+  initialPhase?: Phase;
 }
 
-type Phase = 'arrival' | 'conversation' | 'auth' | 'reveal' | 'commit';
+export type Phase = 'arrival' | 'connect' | 'analyzing' | 'conversation' | 'auth' | 'reveal' | 'commit';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -20,8 +21,12 @@ interface Message {
 
 const TOTAL_TURNS = 9;
 
-export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
-  const [phase, setPhase] = useState<Phase>('arrival');
+export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: OnboardingProps) {
+  const [phase, setPhase] = useState<Phase>(initialPhase || 'arrival');
+  const [baseline, setBaseline] = useState<HealthBaseline | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [analyzeStep, setAnalyzeStep] = useState(0);
   const [arrivalStep, setArrivalStep] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -90,8 +95,51 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
   }, [phase]);
 
   const startConversation = useCallback(() => {
+    setPhase('connect');
+  }, []);
+
+  const handleConnectTracker = useCallback(async () => {
+    setConnectLoading(true);
+    try {
+      const { url } = await initTerraWidget('/?terra=connected');
+      window.location.href = url;
+    } catch (err: any) {
+      setConnectLoading(false);
+      setAnalyzeError(err?.message || 'Failed to open tracker connection');
+    }
+  }, []);
+
+  const handleSkipTracker = useCallback(() => {
     setPhase('conversation');
   }, []);
+
+  // Analyzing phase — fetch baseline, advance to conversation
+  useEffect(() => {
+    if (phase !== 'analyzing') return;
+    let cancelled = false;
+    const stepTimers = [
+      setTimeout(() => !cancelled && setAnalyzeStep(1), 400),
+      setTimeout(() => !cancelled && setAnalyzeStep(2), 1400),
+      setTimeout(() => !cancelled && setAnalyzeStep(3), 2600),
+    ];
+    (async () => {
+      try {
+        const result = await buildHealthBaseline();
+        if (cancelled) return;
+        setBaseline(result.baseline);
+        // Brief pause so the user reads the analyzing animation
+        setTimeout(() => !cancelled && setPhase('conversation'), 800);
+      } catch (err: any) {
+        if (cancelled) return;
+        setAnalyzeError(err?.message || 'Could not analyze data');
+        setTimeout(() => !cancelled && setPhase('conversation'), 1500);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stepTimers.forEach(clearTimeout);
+    };
+  }, [phase]);
 
   // Parse user message to extract structured data
   function extractData(userMsg: string, currentTurn: number): Partial<UserProfile> {
@@ -352,6 +400,91 @@ export function Onboarding({ profile, onUpdate, onComplete }: OnboardingProps) {
           >
             Initialize Protocol
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PHASE: CONNECT TRACKER ──────────────────────────────
+  if (phase === 'connect') {
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden px-6">
+        <div className="absolute inset-0 grid-bg opacity-30" />
+        <div className="absolute inset-0 scanlines" />
+        <div className="relative z-10 w-full max-w-sm fade-up">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
+              <Activity size={28} className="text-white" />
+            </div>
+            <h1 className="font-display text-xl text-neon-teal glow-text uppercase tracking-wider">
+              Connect Your Tracker
+            </h1>
+            <p className="font-ui text-sm text-chrome/60 mt-3 leading-relaxed">
+              I'll read your last 30 days — sleep, heart rate, workouts — so I can coach you on your real numbers, not a formula.
+            </p>
+          </div>
+
+          <button
+            onClick={handleConnectTracker}
+            disabled={connectLoading}
+            className="w-full py-4 rounded-xl font-ui font-semibold text-sm uppercase tracking-wider
+              bg-gradient-to-r from-neon-teal to-neon-pink text-white
+              disabled:opacity-50 transition btn-neon flex items-center justify-center gap-2 mb-3"
+          >
+            {connectLoading ? <Loader2 size={16} className="animate-spin" /> : <Activity size={16} />}
+            Connect Garmin · Whoop · Apple · Oura · Fitbit
+          </button>
+
+          <button
+            onClick={handleSkipTracker}
+            className="w-full py-3 rounded-xl font-ui text-xs text-chrome/50 hover:text-chrome/80 transition uppercase tracking-widest"
+          >
+            Skip — I'll tell you myself
+          </button>
+
+          {analyzeError && (
+            <p className="mt-4 text-neon-pink text-xs font-ui text-center">{analyzeError}</p>
+          )}
+
+          <p className="mt-8 text-[10px] text-chrome/30 font-ui text-center uppercase tracking-widest leading-relaxed">
+            We never share your data. Disconnect anytime in Profile.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PHASE: ANALYZING ────────────────────────────────────
+  if (phase === 'analyzing') {
+    const lines = [
+      'Pulling 30 days of biometric data…',
+      'Modeling your training and recovery…',
+      'Building your baseline…',
+    ];
+    return (
+      <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden px-6">
+        <div className="absolute inset-0 grid-bg opacity-40 animate-pulse" />
+        <div className="absolute inset-0 scanlines" />
+        <div className="relative z-10 w-full max-w-sm text-center">
+          <div className="w-20 h-20 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-neon-teal to-neon-pink flex items-center justify-center glow-teal">
+            <Loader2 size={36} className="text-white animate-spin" />
+          </div>
+          <h1 className="font-display text-xl text-neon-teal glow-text uppercase tracking-wider mb-6">
+            Reading Your Data
+          </h1>
+          <div className="space-y-2 font-ui text-sm text-chrome/60">
+            {lines.map((line, i) => (
+              <p key={i} className={`transition-opacity duration-500 ${i <= analyzeStep ? 'opacity-100' : 'opacity-30'}`}>
+                {i <= analyzeStep ? '✓' : '·'} {line}
+              </p>
+            ))}
+          </div>
+          {baseline && (
+            <p className="mt-8 text-xs text-chrome/40 font-ui italic px-4">{baseline.summary}</p>
+          )}
+          {analyzeError && (
+            <p className="mt-6 text-neon-pink/80 text-xs font-ui">{analyzeError} — continuing without data.</p>
+          )}
         </div>
       </div>
     );

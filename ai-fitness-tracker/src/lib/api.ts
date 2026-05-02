@@ -269,3 +269,25 @@ export async function getMealAdvice(
   const deviceId = localStorage.getItem('macrosnap_device_id') || '';
   return post<ChatResponse>('meal-advisor', { restaurant, profile, todaySummary, messages, deviceId });
 }
+
+// ── Data-first onboarding ───────────────────────────────────────────
+
+export async function initTerraWidget(redirectPath = '/?terra=connected'): Promise<{ url: string; session_id: string }> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<{ url: string; session_id: string }>('terra-init', { device_id: deviceId, redirect_path: redirectPath });
+}
+
+export interface HealthBaseline {
+  summary: string;
+  window_days: number;
+  metrics: Record<string, number | null>;
+  patterns: string[];
+  estimated_tdee: number | null;
+  data_quality: { days_with_sleep: number; days_with_workouts: number; days_with_hrv: number };
+  open_questions: string[];
+}
+
+export async function buildHealthBaseline(): Promise<{ baseline: HealthBaseline; user_model: unknown; days_with_data: number }> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post('health-baseline', { device_id: deviceId });
+}

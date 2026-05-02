@@ -30,10 +30,26 @@ export default function App() {
   const { profile, updateProfile } = useProfile();
   const { user, loading: authLoading } = useAuth();
 
+  // Detect Terra OAuth return — if so, jump straight into the analyzing phase
+  const terraReturn = typeof window !== 'undefined' && /[?&]terra=connected/.test(window.location.search);
+
   // Determine initial screen
   const [screen, setScreen] = useState<Screen>(
-    profile.onboarding_complete ? 'app' : 'landing'
+    terraReturn ? 'onboarding' : (profile.onboarding_complete ? 'app' : 'landing')
   );
+  const [onboardingInitialPhase, setOnboardingInitialPhase] = useState<'analyzing' | undefined>(
+    terraReturn ? 'analyzing' : undefined
+  );
+
+  // Clean the terra param out of the URL once we've consumed it
+  useEffect(() => {
+    if (terraReturn) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('terra');
+      window.history.replaceState({}, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Register service worker + schedule notifications + initial Supabase sync
   useEffect(() => {
@@ -123,6 +139,7 @@ export default function App() {
         profile={profile}
         onUpdate={updateProfile}
         onComplete={handleOnboardingComplete}
+        initialPhase={onboardingInitialPhase}
       />
     );
   }
