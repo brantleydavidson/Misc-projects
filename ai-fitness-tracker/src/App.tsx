@@ -111,8 +111,15 @@ export default function App() {
   }, [updateProfile]);
 
   const handleStartOnboarding = useCallback(() => {
+    // Force authentication first so we have an email tied to the profile
+    // before Terra widget opens. After Google sign-in, App.tsx's auth-state
+    // useEffect routes the user into onboarding automatically.
+    if (!user?.email) {
+      setScreen('login');
+      return;
+    }
     setScreen('onboarding');
-  }, []);
+  }, [user]);
 
   if (screen === 'landing') {
     return (

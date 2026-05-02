@@ -36,6 +36,51 @@ async function terra(path: string) {
   return res.json();
 }
 
+// Mutate-in-place to drop the heavy nested arrays Terra returns. Garmin's
+// daily/sleep payloads include per-second sample arrays even with
+// with_samples=false, blowing memory + JSON.stringify time inside the fn.
+function pruneTerraItem(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+  // Daily-shaped fields
+  if (item.heart_rate_data) {
+    delete item.heart_rate_data.detailed;
+  }
+  if (item.distance_data) {
+    delete item.distance_data.detailed;
+    delete item.distance_data.swimming;
+    delete item.distance_data.elevation;
+  }
+  if (item.calories_data) {
+    delete item.calories_data.calorie_samples;
+  }
+  if (item.MET_data) {
+    delete item.MET_data.MET_samples;
+    delete item.MET_data.activity_levels_samples;
+  }
+  if (item.active_durations_data) {
+    delete item.active_durations_data.activity_levels_samples;
+  }
+  if (item.stress_data) {
+    delete item.stress_data.samples;
+    delete item.stress_data.stress_level_samples;
+  }
+  if (item.oxygen_data) {
+    delete item.oxygen_data.saturation_samples;
+    delete item.oxygen_data.vo2_samples;
+  }
+  if (item.scores) {
+    delete item.scores.detailed;
+  }
+  if (item.tag_data) {
+    delete item.tag_data.tags;
+  }
+  // Sleep-shaped — keep summary, drop per-stage timelines + HR samples
+  if (item.sleep_durations_data) {
+    delete item.sleep_durations_data.hypnogram_samples;
+  }
+  return item;
+}
+
 interface DailyRow {
   profile_id: string;
   date: string;
@@ -329,7 +374,7 @@ export default async (req: Request, _context: Context) => {
           .split("T")[0];
         if (!d) continue;
         const slot = byDate.get(d) || {};
-        slot[kind] = item;
+        slot[kind] = pruneTerraItem(item);
         slot.source = item.metadata?.source || slot.source;
         byDate.set(d, slot);
       }

@@ -272,9 +272,9 @@ export async function getMealAdvice(
 
 // ── Data-first onboarding ───────────────────────────────────────────
 
-export async function initTerraWidget(redirectPath = '/?terra=connected'): Promise<{ url: string; session_id: string }> {
+export async function initTerraWidget(redirectPath = '/?terra=connected', email?: string): Promise<{ url: string; session_id: string }> {
   const deviceId = localStorage.getItem('macrosnap_device_id') || '';
-  return post<{ url: string; session_id: string }>('terra-init', { device_id: deviceId, redirect_path: redirectPath });
+  return post<{ url: string; session_id: string }>('terra-init', { device_id: deviceId, redirect_path: redirectPath, email });
 }
 
 export interface HealthBaseline {

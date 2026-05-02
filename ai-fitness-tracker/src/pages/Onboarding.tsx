@@ -101,13 +101,13 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
   const handleConnectTracker = useCallback(async () => {
     setConnectLoading(true);
     try {
-      const { url } = await initTerraWidget('/?terra=connected');
+      const { url } = await initTerraWidget('/?terra=connected', user?.email);
       window.location.href = url;
     } catch (err: any) {
       setConnectLoading(false);
       setAnalyzeError(err?.message || 'Failed to open tracker connection');
     }
-  }, []);
+  }, [user]);
 
   const handleSkipTracker = useCallback(() => {
     setPhase('conversation');
