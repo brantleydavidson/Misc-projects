@@ -3,6 +3,7 @@ import {
   handleCors, getEnv, jsonResponse, errorResponse,
   checkRateLimit, rateLimitResponse,
   checkUsage, recordUsage, usageLimitResponse,
+  fetchUserContext, formatUserContext,
 } from "./shared/utils.ts";
 
 export default async (req: Request, _context: Context) => {
@@ -47,7 +48,15 @@ export default async (req: Request, _context: Context) => {
       fat: (profile?.fat_target || 65) - (todaySummary?.fat || 0),
     };
 
+    let userContextBlock = '';
+    if (supabaseUrl && supabaseKey) {
+      const ctx = await fetchUserContext(did, supabaseUrl, supabaseKey);
+      userContextBlock = formatUserContext(ctx);
+    }
+
     const systemPrompt = `You are APEX — the AI nutrition coach inside BeJacked. The user is at a restaurant and needs help choosing what to order to hit their macro goals.
+
+${userContextBlock}
 
 TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
 

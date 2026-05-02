@@ -268,3 +268,96 @@ export function usageLimitResponse(used: number, limit: number, tier: Tier, orig
 export function getEnv(key: string): string | undefined {
   return typeof Deno !== 'undefined' ? Deno.env.get(key) : process.env[key];
 }
+
+// ── User Context (data-first onboarding) ────────────────────────────
+
+export interface UserContext {
+  profile_id: string | null;
+  user_model: any | null;
+  health_baseline: any | null;
+  observations: any[];
+}
+
+/**
+ * Loads the data-first onboarding context for a device. Used by chat / food
+ * endpoints so every interaction is grounded in the user_model that the
+ * onboarding agent + daily coach maintain.
+ */
+export async function fetchUserContext(
+  deviceId: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+): Promise<UserContext> {
+  if (!deviceId || deviceId === 'unknown') {
+    return { profile_id: null, user_model: null, health_baseline: null, observations: [] };
+  }
+  try {
+    const profRes = await fetch(
+      `${supabaseUrl}/rest/v1/ja_profiles?device_id=eq.${encodeURIComponent(deviceId)}&select=id,user_model,health_baseline&limit=1`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
+    );
+    if (!profRes.ok) throw new Error('profile lookup failed');
+    const rows = await profRes.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { profile_id: null, user_model: null, health_baseline: null, observations: [] };
+    }
+    const row = rows[0];
+
+    // Pull recent unsurfaced observations
+    let observations: any[] = [];
+    try {
+      const obsRes = await fetch(
+        `${supabaseUrl}/rest/v1/ja_ai_observations?profile_id=eq.${row.id}&order=created_at.desc&limit=5`,
+        { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
+      );
+      if (obsRes.ok) observations = await obsRes.json();
+    } catch { /* non-critical */ }
+
+    return {
+      profile_id: row.id,
+      user_model: row.user_model || null,
+      health_baseline: row.health_baseline || null,
+      observations,
+    };
+  } catch {
+    return { profile_id: null, user_model: null, health_baseline: null, observations: [] };
+  }
+}
+
+/**
+ * Format user context as a compact text block for inclusion in system prompts.
+ * Returns empty string if no useful context exists.
+ */
+export function formatUserContext(ctx: UserContext): string {
+  if (!ctx.user_model && !ctx.health_baseline) return '';
+  const lines: string[] = ['DATA-FIRST CONTEXT (always trust this over generic guidance):'];
+  if (ctx.health_baseline?.summary) {
+    lines.push(`- Baseline: ${ctx.health_baseline.summary}`);
+  }
+  if (ctx.user_model) {
+    const m = ctx.user_model;
+    if (m.goal?.primary) lines.push(`- Goal: ${m.goal.primary}${m.goal.target_kg ? ` (target ${m.goal.target_kg}kg)` : ''}`);
+    if (m.metabolic?.measured_tdee) lines.push(`- Measured TDEE: ${m.metabolic.measured_tdee}kcal`);
+    if (m.metabolic?.target_calories) lines.push(`- Target: ${m.metabolic.target_calories}kcal`);
+    if (m.metabolic?.macros) {
+      const mac = m.metabolic.macros;
+      if (mac.protein_g || mac.carbs_g || mac.fat_g)
+        lines.push(`- Macros: P${mac.protein_g ?? '?'}g C${mac.carbs_g ?? '?'}g F${mac.fat_g ?? '?'}g`);
+    }
+    if (m.lifestyle?.sleep_avg_minutes) lines.push(`- Sleep avg: ${Math.round(m.lifestyle.sleep_avg_minutes / 60 * 10) / 10}h`);
+    if (m.fitness_state?.training_pattern) lines.push(`- Training: ${m.fitness_state.training_pattern}`);
+    if (m.preferences?.dislikes?.length) lines.push(`- Dislikes: ${m.preferences.dislikes.join(', ')}`);
+    if (m.coaching_state?.current_focus) lines.push(`- Current focus: ${m.coaching_state.current_focus}`);
+  }
+  if (ctx.observations?.length) {
+    const recent = ctx.observations
+      .filter(o => o.importance >= 2)
+      .slice(0, 3)
+      .map(o => `  • ${o.content}`);
+    if (recent.length) {
+      lines.push('- Recent observations:');
+      lines.push(...recent);
+    }
+  }
+  return lines.join('\n');
+}

@@ -321,3 +321,36 @@ async function getProfileId(): Promise<string | null> {
     .single();
   return data?.id || null;
 }
+
+// ── AI Observations (data-first onboarding) ───────────────────────
+
+export interface AiObservation {
+  id: string;
+  kind: string;
+  content: string;
+  importance: number;
+  created_at: string;
+  acted_on: boolean;
+}
+
+export async function fetchRecentObservations(limit = 5): Promise<AiObservation[]> {
+  if (!isSupabaseAvailable()) return [];
+  const profileId = await getProfileId();
+  if (!profileId) return [];
+  const { data } = await supabase!
+    .from('ja_ai_observations')
+    .select('id,kind,content,importance,created_at,acted_on')
+    .eq('profile_id', profileId)
+    .gte('importance', 2)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data || []) as AiObservation[];
+}
+
+export async function markObservationActedOn(id: string): Promise<void> {
+  if (!isSupabaseAvailable()) return;
+  await supabase!
+    .from('ja_ai_observations')
+    .update({ acted_on: true })
+    .eq('id', id);
+}

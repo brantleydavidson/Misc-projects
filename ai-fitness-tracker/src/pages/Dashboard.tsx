@@ -8,6 +8,7 @@ import {
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroBar } from '../components/MacroBar';
 import { HealthMetrics } from '../components/HealthMetrics';
+import { Observations } from '../components/Observations';
 import type { UserProfile, BodyPhoto } from '../types';
 import type { HealthSnapshot } from '../types/health';
 import { getHealthSnapshot } from '../lib/health';
@@ -394,6 +395,9 @@ export function Dashboard({ profile }: DashboardProps) {
           </button>
         )}
       </div>
+
+      {/* AI observations from the daily-coach loop */}
+      {currentDay && <Observations />}
 
       {/* Biometrics (Garmin / Open Wearables) */}
       {currentDay && <HealthMetrics snapshot={healthSnapshot} loading={healthLoading} />}

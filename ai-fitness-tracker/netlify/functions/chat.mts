@@ -4,6 +4,7 @@ import {
   checkRateLimit, rateLimitResponse,
   checkUsage, recordUsage, usageLimitResponse,
   sanitizeString,
+  fetchUserContext, formatUserContext,
 } from "./shared/utils.ts";
 import { fetchActiveMemories, formatMemoriesForPrompt, extractMemories } from "./shared/memory.ts";
 import { getCachedOrComputeTrends } from "./shared/trends.ts";
@@ -46,6 +47,12 @@ export default async (req: Request, _context: Context) => {
     let memoriesBlock = '';
     let trendsBlock = '';
     let insightsBlock = '';
+    let userContextBlock = '';
+
+    if (supabaseUrl && supabaseKey) {
+      const ctx = await fetchUserContext(deviceId, supabaseUrl, supabaseKey);
+      userContextBlock = formatUserContext(ctx);
+    }
 
     if (supabaseUrl && supabaseKey && deviceId !== 'unknown') {
       try {
@@ -187,6 +194,7 @@ You have access to the user's real-time data:
 
 TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
 
+${userContextBlock}
 ${profileSummary}${supplementInfo}${peptideInfo}${healthNotes}
 ${todaySummary}
 ${healthBlock}

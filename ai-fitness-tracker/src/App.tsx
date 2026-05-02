@@ -37,7 +37,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(
     terraReturn ? 'onboarding' : (profile.onboarding_complete ? 'app' : 'landing')
   );
-  const [onboardingInitialPhase, setOnboardingInitialPhase] = useState<'analyzing' | undefined>(
+  const [onboardingInitialPhase] = useState<'analyzing' | undefined>(
     terraReturn ? 'analyzing' : undefined
   );
 

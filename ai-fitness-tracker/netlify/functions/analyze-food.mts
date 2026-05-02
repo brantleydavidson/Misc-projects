@@ -3,6 +3,7 @@ import {
   handleCors, getEnv, jsonResponse, errorResponse,
   checkRateLimit, rateLimitResponse,
   checkUsage, recordUsage, usageLimitResponse,
+  fetchUserContext, formatUserContext,
 } from "./shared/utils.ts";
 
 export default async (req: Request, _context: Context) => {
@@ -58,7 +59,15 @@ export default async (req: Request, _context: Context) => {
       nutritionContext += 'USE this data to ground your estimates. Adjust for actual portion sizes in the photo.\n--- END NUTRITION DATA ---\n';
     }
 
+    let userContextBlock = '';
+    if (supabaseUrl && supabaseKey) {
+      const ctx = await fetchUserContext(deviceId, supabaseUrl, supabaseKey);
+      userContextBlock = formatUserContext(ctx);
+    }
+
     const systemPrompt = `You are APEX's food analysis module inside BeJacked. You are an expert nutritionist who identifies food from photos and estimates macronutrients with high accuracy.
+
+${userContextBlock}
 ${memoryContext}${nutritionContext}
 YOUR APPROACH:
 1. Identify every visible food item in the photo
