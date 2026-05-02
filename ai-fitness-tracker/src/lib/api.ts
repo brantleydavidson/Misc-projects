@@ -291,3 +291,17 @@ export async function buildHealthBaseline(): Promise<{ baseline: HealthBaseline;
   const deviceId = localStorage.getItem('macrosnap_device_id') || '';
   return post('health-baseline', { device_id: deviceId });
 }
+
+export interface OnboardingAgentReply {
+  message: string;
+  done: boolean;
+  user_model: unknown;
+  finish_summary: string | null;
+}
+
+export async function onboardingAgent(
+  conversation: { role: 'user' | 'assistant'; content: string }[],
+): Promise<OnboardingAgentReply> {
+  const deviceId = localStorage.getItem('macrosnap_device_id') || '';
+  return post<OnboardingAgentReply>('onboarding-agent', { device_id: deviceId, conversation });
+}

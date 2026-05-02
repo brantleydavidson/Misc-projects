@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dumbbell, Send, Zap, ChevronRight, Mail, Lock, Eye, EyeOff, Loader2, Activity } from 'lucide-react';
 import type { UserProfile } from '../types';
-import { sendOnboarding, initTerraWidget, buildHealthBaseline, type HealthBaseline } from '../lib/api';
+import { sendOnboarding, initTerraWidget, buildHealthBaseline, onboardingAgent, type HealthBaseline } from '../lib/api';
 import { calculateMacros, calculateWaterTarget, calculateBMR, calculateTDEE } from '../lib/calculations';
 import { useAuth } from '../hooks/useAuth';
 
@@ -280,6 +280,28 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
     return data;
   }
 
+  // Agentic mode kicks off when conversation phase starts with a baseline
+  const agenticMode = baseline !== null;
+  const agenticKickoffRef = useRef(false);
+  useEffect(() => {
+    if (phase !== 'conversation' || !agenticMode || agenticKickoffRef.current) return;
+    agenticKickoffRef.current = true;
+    setLoading(true);
+    onboardingAgent([])
+      .then(reply => {
+        setMessages([{ role: 'assistant', content: reply.message }]);
+        if (reply.done) {
+          // Edge case: agent finishes without asking
+          setPhase('reveal');
+        }
+      })
+      .catch(err => {
+        console.error('[onboarding-agent kickoff]', err);
+        setMessages([{ role: 'assistant', content: "Tell me your name and what brings you here." }]);
+      })
+      .finally(() => setLoading(false));
+  }, [phase, agenticMode]);
+
   async function handleSend(text?: string) {
     const msg = text || input.trim();
     if (!msg || loading) return;
@@ -290,6 +312,37 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
     setMessages(updated);
     setLoading(true);
 
+    // ─── Agentic path ──────────────────────────────────────
+    if (agenticMode) {
+      try {
+        const reply = await onboardingAgent(updated.map(m => ({ role: m.role, content: m.content })));
+        setMessages(prev => [...prev, { role: 'assistant', content: reply.message }]);
+        if (reply.done) {
+          // Pull the freshly persisted user_model fields onto the local profile so
+          // calculateMacros etc. have what they need (best-effort).
+          const um: any = reply.user_model || {};
+          onUpdate({
+            ...collectedData,
+            age: um?.identity?.age ?? collectedData.age,
+            biological_sex: um?.identity?.sex ?? collectedData.biological_sex,
+            current_weight_kg: um?.identity?.weight_kg ?? collectedData.current_weight_kg,
+            height_cm: um?.identity?.height_cm ?? collectedData.height_cm,
+            goal_weight_kg: um?.goal?.target_kg ?? collectedData.goal_weight_kg,
+            goal_description: um?.goal?.primary ?? collectedData.goal_description,
+          });
+          setLoading(false);
+          setPhase(user ? 'reveal' : 'auth');
+        }
+      } catch (err) {
+        console.error('[onboarding-agent]', err);
+        setMessages(prev => [...prev, { role: 'assistant', content: "I had a hiccup — say that again?" }]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ─── Scripted fallback ─────────────────────────────────
     // Extract data from user message
     const extracted = extractData(msg, turn);
     const newCollected = { ...collectedData, ...extracted };
