@@ -23,6 +23,44 @@ async function supabasePatch(table: string, query: string, body: object) {
 // ── POST /api/terra-webhook ──────────────────────────────────────
 // Receives webhook events from Terra API
 // Terra sends: { type: string, user: { user_id, reference_id, provider }, data: [...] }
+// Terra signs the payload with HMAC-SHA256 using TERRA_SIGNING_SECRET.
+// Header format: `terra-signature: t=<unix>,v1=<hex>`
+
+async function verifyTerraSignature(rawBody: string, header: string | null, secret: string): Promise<boolean> {
+  if (!header) return false;
+  const parts = Object.fromEntries(
+    header.split(',').map(kv => {
+      const [k, v] = kv.split('=');
+      return [k.trim(), v?.trim() ?? ''];
+    }),
+  );
+  const t = parts['t'];
+  const v1 = parts['v1'];
+  if (!t || !v1) return false;
+
+  // Reject anything older than 5 minutes
+  const ageSec = Math.floor(Date.now() / 1000) - Number(t);
+  if (!Number.isFinite(ageSec) || ageSec > 300 || ageSec < -60) return false;
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(`${t}.${rawBody}`));
+  const computed = Array.from(new Uint8Array(sigBuf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  // Constant-time compare
+  if (computed.length !== v1.length) return false;
+  let diff = 0;
+  for (let i = 0; i < computed.length; i++) diff |= computed.charCodeAt(i) ^ v1.charCodeAt(i);
+  return diff === 0;
+}
 
 export default async (req: Request, _context: Context) => {
   // No CORS handling for webhooks — these come from Terra servers, not browsers
@@ -36,8 +74,21 @@ export default async (req: Request, _context: Context) => {
     return errorResponse("Webhook not configured", 503);
   }
 
+  // Read the raw body once so we can both verify the signature and parse JSON
+  const rawBody = await req.text();
+
+  // Signature verification — required when TERRA_SIGNING_SECRET is set
+  const signingSecret = getEnv('TERRA_SIGNING_SECRET');
+  if (signingSecret) {
+    const ok = await verifyTerraSignature(rawBody, req.headers.get('terra-signature'), signingSecret);
+    if (!ok) {
+      console.warn('[terra-webhook] signature verification failed');
+      return errorResponse('Invalid signature', 401);
+    }
+  }
+
   try {
-    const payload = await req.json();
+    const payload = JSON.parse(rawBody);
 
     // Basic validation: ensure we have a type and the payload is valid
     if (!payload || !payload.type) {
