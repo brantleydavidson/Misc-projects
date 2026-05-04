@@ -802,7 +802,7 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={turn === 0 ? "Your name..." : "Type your response..."}
+              placeholder={agenticMode ? "Type your response..." : (turn === 0 ? "Your name..." : "Type your response...")}
               rows={1}
               className="flex-1 bg-transparent text-chrome text-sm placeholder-chrome/30 resize-none focus:outline-none px-2 py-1.5 max-h-24 font-ui"
             />

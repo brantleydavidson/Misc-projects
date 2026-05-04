@@ -122,6 +122,7 @@ RULES:
     : trackerConnected
       ? `Acknowledge that their Garmin just connected and that you'll be reading from it as data syncs in the background. Then ask their primary goal — that's the biggest unknown.`
       : `Greet them by name${firstName ? ` (${firstName})` : ""}. Ask what brought them here.`}
+- **EVERY reply MUST contain a text response — never tool calls only.** The user is reading your text bubble. After tool calls, always say something out loud. The ONLY exception: when you call finish(), you may also include a short summary as text but it's optional.
 - Never ask for their name if you already have it from their Google account.
 - Never ask for something already in user_model. If a field is filled, don't re-ask.
 - One question at a time. Conversational, not a survey.
@@ -192,30 +193,78 @@ export default async (req: Request, _context: Context) => {
       }),
     });
     if (!res.ok) return errorResponse(`Claude ${res.status}: ${await res.text()}`, 502, origin);
-    const data = await res.json();
+    let data = await res.json();
 
     // Process content blocks
     let assistantText = "";
     let done = false;
     let finishSummary: string | null = null;
     const updatedModel = JSON.parse(JSON.stringify(userModel));
+    const toolUseBlocks: any[] = [];
 
-    for (const block of data.content || []) {
-      if (block.type === "text") {
-        assistantText += block.text;
-      } else if (block.type === "tool_use") {
-        if (block.name === "mark_known") {
-          try {
-            setPath(updatedModel, block.input.path, block.input.value);
-          } catch { /* ignore bad path */ }
-        } else if (block.name === "flag_gap") {
-          if (!updatedModel.gaps) updatedModel.gaps = [];
-          if (!updatedModel.gaps.includes(block.input.field))
-            updatedModel.gaps.push(block.input.field);
-        } else if (block.name === "finish") {
-          done = true;
-          finishSummary = block.input.summary || null;
+    const processContent = (content: any[]) => {
+      for (const block of content || []) {
+        if (block.type === "text") {
+          assistantText += block.text;
+        } else if (block.type === "tool_use") {
+          toolUseBlocks.push(block);
+          if (block.name === "mark_known") {
+            try {
+              setPath(updatedModel, block.input.path, block.input.value);
+            } catch { /* ignore bad path */ }
+          } else if (block.name === "flag_gap") {
+            if (!updatedModel.gaps) updatedModel.gaps = [];
+            if (!updatedModel.gaps.includes(block.input.field))
+              updatedModel.gaps.push(block.input.field);
+          } else if (block.name === "finish") {
+            done = true;
+            finishSummary = block.input.summary || null;
+          }
         }
+      }
+    };
+    processContent(data.content);
+
+    // If Claude only called tools (no text), do a follow-up turn with tool
+    // results so it produces an actual coaching reply. Skip when finish() was
+    // called — no further reply needed.
+    if (!assistantText.trim() && toolUseBlocks.length > 0 && !done) {
+      const followupMessages = [
+        ...apiMessages,
+        { role: "assistant", content: data.content },
+        {
+          role: "user",
+          content: toolUseBlocks.map(t => ({
+            type: "tool_result",
+            tool_use_id: t.id,
+            content: "ok",
+          })),
+        },
+      ];
+      const res2 = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": getEnv("ANTHROPIC_API_KEY")!,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-5",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: buildSystemPrompt(profile, profile.health_baseline, updatedModel, updatedModel.gaps || []),
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          tools: TOOLS,
+          messages: followupMessages,
+        }),
+      });
+      if (res2.ok) {
+        data = await res2.json();
+        processContent(data.content);
       }
     }
 
