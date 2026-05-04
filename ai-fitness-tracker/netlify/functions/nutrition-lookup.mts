@@ -152,7 +152,7 @@ async function aiResearch(query: string): Promise<NutritionResult | null> {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 256,
         system: `You are a nutrition database. Given a food item, return accurate macronutrient data based on your knowledge of USDA nutrition databases, food science, and standard serving sizes. Respond ONLY with JSON, no other text.`,
         messages: [{

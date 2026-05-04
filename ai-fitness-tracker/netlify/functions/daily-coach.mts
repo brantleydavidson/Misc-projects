@@ -123,7 +123,7 @@ async function reviewProfile(profile: any): Promise<{ updated: boolean; observat
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 1500,
       tools: [COACH_TOOL],
       tool_choice: { type: "tool", name: "save_review" },

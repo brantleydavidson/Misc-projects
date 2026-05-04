@@ -229,7 +229,7 @@ async function callClaude(profileMeta: any, dataLines: string): Promise<any> {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5",
+      model: "claude-opus-4-7",
       max_tokens: 2000,
       tools: [BASELINE_TOOL],
       tool_choice: { type: "tool", name: "save_baseline" },
