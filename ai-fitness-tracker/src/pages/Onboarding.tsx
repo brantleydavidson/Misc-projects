@@ -113,7 +113,10 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
     setPhase('conversation');
   }, []);
 
-  // Analyzing phase — fetch baseline, then advance to confirm (or fall back to scripted)
+  const [syncProgress, setSyncProgress] = useState<{ days: number; usefulDays: number } | null>(null);
+
+  // Analyzing phase — poll baseline endpoint; if it returns "syncing",
+  // wait + retry. If it returns "ready", advance to confirm.
   useEffect(() => {
     if (phase !== 'analyzing') return;
     let cancelled = false;
@@ -122,33 +125,42 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
       setTimeout(() => !cancelled && setAnalyzeStep(2), 1400),
       setTimeout(() => !cancelled && setAnalyzeStep(3), 2600),
     ];
-    (async () => {
+
+    const MAX_ATTEMPTS = 9;       // 9 × 20s ≈ 3 minutes max wait
+    const POLL_INTERVAL_MS = 20_000;
+
+    let attempt = 0;
+    const poll = async (): Promise<void> => {
+      if (cancelled) return;
+      attempt++;
       try {
         const result = await buildHealthBaseline();
         if (cancelled) return;
-        const dq = result.baseline?.data_quality;
-        const usableDays = (dq?.days_with_sleep ?? 0) + (dq?.days_with_workouts ?? 0) + (dq?.days_with_hrv ?? 0);
-        // Always set the baseline so the conversation goes agentic — even if
-        // empty, the agent knows the tracker is connected and will adapt as
-        // webhooks deliver data over the next hours.
-        setBaseline(result.baseline);
-        if (result.days_with_data === 0 || usableDays === 0) {
-          // Tracker connected but Terra hasn't delivered historical data yet
-          // (typical for fresh Garmin connections — sync runs over webhooks).
-          // Skip the confirm screen since there's nothing to confirm; go
-          // straight to the agentic conversation, which will acknowledge the
-          // pending sync and adapt as data arrives.
-          setTimeout(() => !cancelled && setPhase('conversation'), 800);
+
+        if (result.status === 'syncing') {
+          setSyncProgress({ days: result.days_with_data, usefulDays: result.useful_days ?? 0 });
+          if (attempt >= MAX_ATTEMPTS) {
+            // Give up waiting — let the user move forward; webhooks will keep
+            // populating in the background and chat will see the data later.
+            setAnalyzeError("Garmin is still catching up — we'll keep syncing in the background.");
+            setTimeout(() => !cancelled && setPhase('conversation'), 1500);
+            return;
+          }
+          setTimeout(poll, POLL_INTERVAL_MS);
           return;
         }
-        // We have data — show the read-back so the user can confirm/correct
+
+        // status === 'ready' — we have a real baseline
+        setBaseline(result.baseline ?? null);
         setTimeout(() => !cancelled && setPhase('confirm'), 800);
       } catch (err: any) {
         if (cancelled) return;
         setAnalyzeError(err?.message || 'Could not analyze data');
         setTimeout(() => !cancelled && setPhase('conversation'), 1500);
       }
-    })();
+    };
+
+    poll();
     return () => {
       cancelled = true;
       stepTimers.forEach(clearTimeout);
@@ -543,11 +555,12 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
 
   // ─── PHASE: ANALYZING ────────────────────────────────────
   if (phase === 'analyzing') {
-    const lines = [
-      'Pulling 30 days of biometric data…',
-      'Modeling your training and recovery…',
-      'Building your baseline…',
-    ];
+    const isSyncing = syncProgress !== null;
+    const targetDays = 30;
+    const percent = isSyncing
+      ? Math.min(100, Math.round((syncProgress.usefulDays / 7) * 100))
+      : null;
+
     return (
       <div className="min-h-screen bg-deep-navy flex flex-col items-center justify-center relative overflow-hidden px-6">
         <div className="absolute inset-0 grid-bg opacity-40 animate-pulse" />
@@ -557,20 +570,51 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
             <Loader2 size={36} className="text-white animate-spin" />
           </div>
           <h1 className="font-display text-xl text-neon-teal glow-text uppercase tracking-wider mb-6">
-            Reading Your Data
+            {isSyncing ? 'Syncing Your Garmin' : 'Reading Your Data'}
           </h1>
-          <div className="space-y-2 font-ui text-sm text-chrome/60">
-            {lines.map((line, i) => (
-              <p key={i} className={`transition-opacity duration-500 ${i <= analyzeStep ? 'opacity-100' : 'opacity-30'}`}>
-                {i <= analyzeStep ? '✓' : '·'} {line}
+
+          {!isSyncing ? (
+            <div className="space-y-2 font-ui text-sm text-chrome/60">
+              {['Pulling 30 days of biometric data…', 'Modeling your training and recovery…', 'Building your baseline…'].map((line, i) => (
+                <p key={i} className={`transition-opacity duration-500 ${i <= analyzeStep ? 'opacity-100' : 'opacity-30'}`}>
+                  {i <= analyzeStep ? '✓' : '·'} {line}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <>
+              <p className="font-ui text-sm text-chrome/70 leading-relaxed mb-5">
+                Garmin is delivering your last {targetDays} days of data. This usually takes 1–3 minutes for a fresh connection.
               </p>
-            ))}
-          </div>
+
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-3">
+                <div
+                  className="h-full bg-gradient-to-r from-neon-teal to-neon-pink transition-all duration-700"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <p className="font-ui text-xs text-chrome/50 uppercase tracking-widest">
+                {syncProgress.usefulDays} / 7 days received
+              </p>
+
+              <div className="mt-8 space-y-1.5 font-ui text-[11px] text-chrome/40">
+                <p>· Sleep, HRV, resting heart rate</p>
+                <p>· Workouts and training load</p>
+                <p>· Steps and active calories</p>
+              </div>
+
+              <p className="mt-6 text-[10px] text-chrome/30 font-ui uppercase tracking-widest">
+                Don't close this tab
+              </p>
+            </>
+          )}
+
           {baseline && (
             <p className="mt-8 text-xs text-chrome/40 font-ui italic px-4">{baseline.summary}</p>
           )}
           {analyzeError && (
-            <p className="mt-6 text-neon-pink/80 text-xs font-ui">{analyzeError} — continuing without data.</p>
+            <p className="mt-6 text-neon-pink/80 text-xs font-ui">{analyzeError}</p>
           )}
         </div>
       </div>

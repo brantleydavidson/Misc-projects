@@ -345,12 +345,11 @@ export default async (req: Request, _context: Context) => {
         origin,
       );
 
-    // 2. Pull 14d range from Terra (parallel). Smaller window keeps us under
-    // Netlify's 10s function timeout — Terra's payloads can hit several MB
-    // even with with_samples=false.
+    // 2. Pull 30d range from Terra (parallel). With pruneTerraItem dropping
+    // sample arrays + the 26s function timeout in netlify.toml, this fits.
     const end = new Date();
     const start = new Date();
-    start.setDate(start.getDate() - 14);
+    start.setDate(start.getDate() - 30);
     const startStr = start.toISOString().split("T")[0];
     const endStr = end.toISOString().split("T")[0];
 
@@ -399,7 +398,7 @@ export default async (req: Request, _context: Context) => {
     }
     rows.sort((a, b) => a.date.localeCompare(b.date));
 
-    // 4. Upsert into ja_health_daily
+    // 4. Upsert Terra-fetched rows into ja_health_daily
     if (rows.length > 0) {
       await sb("ja_health_daily?on_conflict=profile_id,date", {
         method: "POST",
@@ -408,7 +407,32 @@ export default async (req: Request, _context: Context) => {
       });
     }
 
-    // 5. Ask Claude for the baseline
+    // 5. Re-read from ja_health_daily — webhooks may have delivered more rows
+    // than Terra's synchronous query, so the DB is the source of truth.
+    const dbRows = await sb(
+      `ja_health_daily?profile_id=eq.${profileId}&date=gte.${startStr}&order=date.asc`,
+    );
+    const finalRows: DailyRow[] = Array.isArray(dbRows) ? dbRows : rows;
+
+    // If we have very little data, return an early "still syncing" response
+    // and skip Claude — the frontend can poll us back in 20s.
+    const usefulDays = finalRows.filter(
+      r => r.sleep_minutes != null || r.steps != null || r.hrv != null,
+    ).length;
+    if (usefulDays < 7) {
+      return jsonResponse(
+        {
+          status: "syncing",
+          days_with_data: finalRows.length,
+          useful_days: usefulDays,
+          message: "Garmin is still delivering your historical data. We'll have your baseline once at least a week of data has synced.",
+        },
+        202,
+        origin,
+      );
+    }
+
+    // 6. Ask Claude for the baseline
     const profileMeta = {
       age: profile.age,
       sex: profile.biological_sex,
@@ -416,9 +440,9 @@ export default async (req: Request, _context: Context) => {
       weight_kg: profile.current_weight_kg,
       stated_goal: profile.goal_description,
     };
-    const baseline = await callClaude(profileMeta, summarizeForClaude(rows));
+    const baseline = await callClaude(profileMeta, summarizeForClaude(finalRows));
 
-    // 6. Persist baseline + seed user_model
+    // 7. Persist baseline + seed user_model
     const userModel = seedUserModel(profile, baseline);
     await sb(
       `ja_profiles?id=eq.${profileId}`,
@@ -433,7 +457,7 @@ export default async (req: Request, _context: Context) => {
     );
 
     return jsonResponse(
-      { baseline, user_model: userModel, days_with_data: rows.length },
+      { baseline, user_model: userModel, days_with_data: finalRows.length, status: "ready" },
       200,
       origin,
     );

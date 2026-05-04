@@ -8,6 +8,10 @@ async function post<T>(endpoint: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  // 202 = "still working, try again" — surface the body so the caller can decide
+  if (res.status === 202) {
+    return res.json();
+  }
   if (!res.ok) {
     const error = await res.text();
     throw new Error(error || `API error: ${res.status}`);
@@ -287,7 +291,16 @@ export interface HealthBaseline {
   open_questions: string[];
 }
 
-export async function buildHealthBaseline(): Promise<{ baseline: HealthBaseline; user_model: unknown; days_with_data: number }> {
+export interface BaselineResponse {
+  baseline?: HealthBaseline;
+  user_model?: unknown;
+  days_with_data: number;
+  status?: 'ready' | 'syncing';
+  useful_days?: number;
+  message?: string;
+}
+
+export async function buildHealthBaseline(): Promise<BaselineResponse> {
   const deviceId = localStorage.getItem('macrosnap_device_id') || '';
   return post('health-baseline', { device_id: deviceId });
 }
