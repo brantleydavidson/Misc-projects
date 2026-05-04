@@ -1,0 +1,5 @@
+# MCP config contains API keys
+.mcp.json
+
+# External repos (cloned for reference)
+open-wearables/
