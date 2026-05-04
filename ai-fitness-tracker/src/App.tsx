@@ -30,8 +30,14 @@ export default function App() {
   const { profile, updateProfile } = useProfile();
   const { user, loading: authLoading } = useAuth();
 
-  // Detect Terra OAuth return — if so, jump straight into the analyzing phase
-  const terraReturn = typeof window !== 'undefined' && /[?&]terra=connected/.test(window.location.search);
+  // Detect Terra OAuth return. Terra strips our custom `?terra=connected`
+  // param and appends its own — so we look for the Terra signature
+  // (reference_id + user_id + resource) instead.
+  const terraReturn = typeof window !== 'undefined' && (() => {
+    const p = new URLSearchParams(window.location.search);
+    return /terra=connected/.test(window.location.search) ||
+      (p.has('reference_id') && p.has('user_id') && p.has('resource'));
+  })();
 
   // Determine initial screen
   const [screen, setScreen] = useState<Screen>(
@@ -41,11 +47,11 @@ export default function App() {
     terraReturn ? 'analyzing' : undefined
   );
 
-  // Clean the terra param out of the URL once we've consumed it
+  // Clean Terra params out of the URL once we've consumed them
   useEffect(() => {
     if (terraReturn) {
       const url = new URL(window.location.href);
-      url.searchParams.delete('terra');
+      ['terra', 'reference_id', 'flow_id', 'is_new', 'resource', 'user_id'].forEach(k => url.searchParams.delete(k));
       window.history.replaceState({}, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

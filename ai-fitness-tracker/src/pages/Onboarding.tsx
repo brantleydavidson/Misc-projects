@@ -128,15 +128,20 @@ export function Onboarding({ profile, onUpdate, onComplete, initialPhase }: Onbo
         if (cancelled) return;
         const dq = result.baseline?.data_quality;
         const usableDays = (dq?.days_with_sleep ?? 0) + (dq?.days_with_workouts ?? 0) + (dq?.days_with_hrv ?? 0);
+        // Always set the baseline so the conversation goes agentic — even if
+        // empty, the agent knows the tracker is connected and will adapt as
+        // webhooks deliver data over the next hours.
+        setBaseline(result.baseline);
         if (result.days_with_data === 0 || usableDays === 0) {
-          // Tracker connected but no data flowed through (common with Apple Health
-          // on web — needs the iOS SDK). Skip to scripted onboarding.
-          setAnalyzeError("No data from your tracker yet — falling back to a manual intake.");
-          setTimeout(() => !cancelled && setPhase('conversation'), 1500);
+          // Tracker connected but Terra hasn't delivered historical data yet
+          // (typical for fresh Garmin connections — sync runs over webhooks).
+          // Skip the confirm screen since there's nothing to confirm; go
+          // straight to the agentic conversation, which will acknowledge the
+          // pending sync and adapt as data arrives.
+          setTimeout(() => !cancelled && setPhase('conversation'), 800);
           return;
         }
-        setBaseline(result.baseline);
-        // Brief pause so the user reads the animation, then show the read-back
+        // We have data — show the read-back so the user can confirm/correct
         setTimeout(() => !cancelled && setPhase('confirm'), 800);
       } catch (err: any) {
         if (cancelled) return;

@@ -83,29 +83,51 @@ const TOOLS = [
   },
 ];
 
-function buildSystemPrompt(baseline: any, userModel: any, gaps: string[]) {
+function buildSystemPrompt(profile: any, baseline: any, userModel: any, gaps: string[]) {
+  const email = profile?.email || null;
+  const firstName = email ? email.split('@')[0].split('.')[0].replace(/[^a-zA-Z]/g, '') : null;
+  const trackerConnected = !!profile?.terra_user_id;
+  const dq = baseline?.data_quality || {};
+  const hasUsableData =
+    (dq.days_with_sleep ?? 0) + (dq.days_with_workouts ?? 0) + (dq.days_with_hrv ?? 0) > 0;
+
+  let dataContext: string;
+  if (!trackerConnected) {
+    dataContext = "User skipped wearable connection. No biometric data — run a manual intake.";
+  } else if (!hasUsableData) {
+    dataContext = `User just connected their Garmin (or other wearable). Historical data is still syncing in the background — Terra delivers it via webhooks over the next 1-3 hours. You don't have any biometric metrics yet, but DO acknowledge that you're going to be using them once they arrive. Use this phase to get to know the user; the data will fill in.`;
+  } else {
+    dataContext = `Their last ${baseline.window_days} days of biometric data:\n${baseline.summary}\nPatterns: ${JSON.stringify(baseline.patterns ?? [])}\nEstimated TDEE: ${baseline.estimated_tdee ?? "unknown"}`;
+  }
+
   return `You are APEX — the onboarding coach for BeJacked. Direct, warm, data-informed. Your voice blends 80s ambition with modern exercise science.
 
-You have already analyzed the user's biometric data. Your job: fill in what you DON'T know, then call finish().
+WHO YOU'RE TALKING TO:
+${firstName ? `- First name (from their Google account): ${firstName} (use it naturally — don't ask their name again)` : "- We don't have their name yet — ask early."}
+${email ? `- Email: ${email}` : ""}
+${trackerConnected ? `- ✅ Wearable connected (provider stored in profile)` : "- ❌ No wearable connected"}
+
+DATA CONTEXT:
+${dataContext}
 
 WHAT YOU ALREADY KNOW (user_model):
 ${JSON.stringify(userModel, null, 2)}
 
-DATA HIGHLIGHTS (from their last 30 days):
-${baseline?.summary ?? "No biometric data — user skipped tracker. Treat as scripted intake."}
-Patterns: ${JSON.stringify(baseline?.patterns ?? [])}
-Estimated TDEE: ${baseline?.estimated_tdee ?? "unknown"}
-
 WHAT'S MISSING (gaps to close):
-${gaps.length ? gaps.join(", ") : "Default gaps: primary goal, target weight, dietary preferences, dislikes, training schedule, sleep windows, notification preferences"}
+${gaps.length ? gaps.join(", ") : "primary goal, target weight, dietary preferences, dislikes, training schedule, sleep windows, notification preferences"}
 
 RULES:
-- OPEN your first reply with a SHORT observation that proves you read their data (e.g. "Your HRV's down 12% the last 2 weeks — burnout, illness, or stress?"). Then ask the most important missing thing.
+- OPEN your first reply with something that proves you know who they are. ${hasUsableData
+    ? `Reference a SPECIFIC observation from their data (e.g. "Your HRV's down 12% the last 2 weeks — burnout, illness, or stress?").`
+    : trackerConnected
+      ? `Acknowledge that their Garmin just connected and that you'll be reading from it as data syncs in the background. Then ask their primary goal — that's the biggest unknown.`
+      : `Greet them by name${firstName ? ` (${firstName})` : ""}. Ask what brought them here.`}
+- Never ask for their name if you already have it from their Google account.
 - Never ask for something already in user_model. If a field is filled, don't re-ask.
 - One question at a time. Conversational, not a survey.
-- After EACH user response, call mark_known(path, value) to record what you learned. Be liberal — capture everything.
+- After EACH user response, call mark_known(path, value) to record what you learned. Be liberal — capture everything: identity.age, goal.primary, preferences.dislikes, fitness_state.training_pattern, etc.
 - If the user volunteers something not in the schema, call flag_gap(field, reason).
-- When you have enough to set macros + training schedule + notification windows: call finish(summary). Aim to finish in 4-7 user turns.
+- When you have enough to set macros + training schedule + notification windows: call finish(summary). Aim for 4-7 user turns.
 - Keep replies 1-3 sentences. Punchy. Reference something specific from their previous answer.
 - Never use filler praise. You are a coach, not a chatbot.`;
 }
@@ -124,7 +146,7 @@ export default async (req: Request, _context: Context) => {
 
     // Load profile + baseline + user_model
     const profiles = await sb(
-      `ja_profiles?device_id=eq.${encodeURIComponent(device_id)}&select=id,health_baseline,user_model&limit=1`,
+      `ja_profiles?device_id=eq.${encodeURIComponent(device_id)}&select=id,email,terra_user_id,health_baseline,user_model&limit=1`,
     );
     if (!Array.isArray(profiles) || profiles.length === 0)
       return errorResponse("Profile not found", 404, origin);
@@ -159,7 +181,7 @@ export default async (req: Request, _context: Context) => {
         system: [
           {
             type: "text",
-            text: buildSystemPrompt(profile.health_baseline, userModel, gaps),
+            text: buildSystemPrompt(profile, profile.health_baseline, userModel, gaps),
             cache_control: { type: "ephemeral" },
           },
         ],

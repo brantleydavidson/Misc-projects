@@ -142,12 +142,77 @@ export default async (req: Request, _context: Context) => {
         return jsonResponse({ status: 'ok', event: 'deauth' }, 200);
       }
 
-      // Data events — we pull data on-demand via snapshot/data endpoints,
-      // so just acknowledge these for now. Storage can be added later.
-      case 'activity':
+      // Data events — persist into ja_health_daily so the user_model can
+      // build up as Terra delivers historical data over the first few hours
+      // after a fresh wearable connection.
       case 'daily':
       case 'sleep':
-      case 'body':
+      case 'body': {
+        if (!user?.user_id) return jsonResponse({ status: 'ignored', reason: 'missing user_id' }, 200);
+
+        // Look up the local profile by terra_user_id
+        const profileRes = await fetch(
+          `${SUPABASE_URL()}/rest/v1/ja_profiles?terra_user_id=eq.${encodeURIComponent(user.user_id)}&select=id&limit=1`,
+          { headers: { apikey: SUPABASE_KEY(), Authorization: `Bearer ${SUPABASE_KEY()}` } },
+        );
+        const profiles = await profileRes.json();
+        if (!Array.isArray(profiles) || profiles.length === 0) {
+          return jsonResponse({ status: 'ignored', reason: 'no profile for terra_user_id' }, 200);
+        }
+        const profileId = profiles[0].id;
+        const items = Array.isArray(payload.data) ? payload.data : [];
+
+        // Build per-day patches keyed by date — Terra delivers events for one
+        // day at a time, but we need to merge daily/sleep/body into one row.
+        const rows: any[] = [];
+        for (const item of items) {
+          const date = (item.metadata?.start_time || item.metadata?.summary_date || '').split('T')[0];
+          if (!date) continue;
+          const row: any = { profile_id: profileId, date, source: item.metadata?.source || user.provider };
+          if (type === 'daily') {
+            row.steps = item.distance_data?.steps ?? null;
+            row.active_calories = item.calories_data?.net_activity_calories ?? null;
+            row.resting_hr = item.heart_rate_data?.summary?.resting_hr_bpm ?? null;
+            row.hrv = item.heart_rate_data?.summary?.hrv_rmssd ?? item.heart_rate_data?.summary?.avg_hrv_rmssd ?? null;
+          }
+          if (type === 'sleep') {
+            const a = item.sleep_durations_data?.asleep || {};
+            const seconds = (a.duration_light_sleep_state_seconds || 0)
+              + (a.duration_deep_sleep_state_seconds || 0)
+              + (a.duration_REM_sleep_state_seconds || 0);
+            if (seconds > 0) row.sleep_minutes = Math.round(seconds / 60);
+            if (item.sleep_durations_data?.sleep_efficiency != null)
+              row.sleep_efficiency = item.sleep_durations_data.sleep_efficiency;
+            if (item.heart_rate_data?.hrv?.rmssd != null && row.hrv == null)
+              row.hrv = item.heart_rate_data.hrv.rmssd;
+          }
+          if (type === 'body') {
+            row.body_comp = {
+              weight_kg: item.weight_kg ?? null,
+              body_fat_pct: item.body_fat_percentage ?? null,
+            };
+          }
+          rows.push(row);
+        }
+
+        if (rows.length > 0) {
+          await fetch(`${SUPABASE_URL()}/rest/v1/ja_health_daily?on_conflict=profile_id,date`, {
+            method: 'POST',
+            headers: {
+              apikey: SUPABASE_KEY(),
+              Authorization: `Bearer ${SUPABASE_KEY()}`,
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates,return=minimal',
+            },
+            body: JSON.stringify(rows),
+          });
+        }
+
+        return jsonResponse({ status: 'ok', event: type, rows: rows.length }, 200);
+      }
+
+      // Other data events — acknowledge but don't persist yet
+      case 'activity':
       case 'nutrition':
       case 'menstruation': {
         return jsonResponse({ status: 'ok', event: type }, 200);
