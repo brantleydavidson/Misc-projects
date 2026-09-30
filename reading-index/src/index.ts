@@ -29,7 +29,7 @@ console.log(JSON.stringify({
   port: config.port,
   database: config.databaseUrl || config.instanceConnectionName ? 'postgres' : 'memory',
   storage: config.gcsBucket ? 'gcs' : 'local',
-  drive: Boolean(config.driveFolderId && config.googleCredentialsJson),
+  drive: Boolean(config.driveCredentialsJson),
 }));
 
 async function openRepository() {

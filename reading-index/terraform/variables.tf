@@ -21,13 +21,13 @@ variable "optimize_schedule" {
 }
 
 variable "drive_folder_id" {
-  description = "Google Drive folder id shared with the upload service account. Empty skips Drive."
+  description = "Optional Drive folder id. When empty, the app finds or creates a folder named Reading in the user's My Drive."
   type        = string
   default     = ""
 }
 
 variable "enable_drive" {
-  description = "Mount Drive credentials from Secret Manager. Add a secret version before setting this true."
+  description = "Mount the user's Google authorized-user JSON from Secret Manager as DRIVE_CREDENTIALS_JSON. Add a secret version before setting this true."
   type        = bool
   default     = false
 }

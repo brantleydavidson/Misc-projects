@@ -276,10 +276,6 @@ resource "google_cloud_run_v2_service" "app" {
       }
 
       env {
-        name  = "PORT"
-        value = "8080"
-      }
-      env {
         name  = "GCS_BUCKET"
         value = google_storage_bucket.originals.name
       }
@@ -342,7 +338,7 @@ resource "google_cloud_run_v2_service" "app" {
       }
 
       dynamic "env" {
-        for_each = var.enable_drive ? [1] : []
+        for_each = var.enable_drive && var.drive_folder_id != "" ? [1] : []
         content {
           name  = "DRIVE_FOLDER_ID"
           value = var.drive_folder_id
@@ -352,7 +348,7 @@ resource "google_cloud_run_v2_service" "app" {
       dynamic "env" {
         for_each = var.enable_drive ? [1] : []
         content {
-          name = "GOOGLE_CREDENTIALS_JSON"
+          name = "DRIVE_CREDENTIALS_JSON"
           value_source {
             secret_key_ref {
               secret  = google_secret_manager_secret.drive_credentials.secret_id
@@ -418,14 +414,5 @@ resource "google_cloud_scheduler_job" "optimize" {
       Content-Type  = "application/json"
     }
     body = base64encode("{\"source\":\"scheduler\"}")
-  }
-}
-
-resource "terraform_data" "drive_requirements" {
-  lifecycle {
-    precondition {
-      condition     = !var.enable_drive || var.drive_folder_id != ""
-      error_message = "Set drive_folder_id before enable_drive. The Drive secret also needs a version."
-    }
   }
 }

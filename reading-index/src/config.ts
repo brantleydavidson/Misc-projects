@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   DEFAULT_MAX_BODY,
   DEFAULT_OPTIMIZE_CAP,
@@ -16,7 +17,7 @@ export interface AppConfig {
   gcsBucket?: string;
   dataDir: string;
   driveFolderId?: string;
-  googleCredentialsJson?: string;
+  driveCredentialsJson?: string;
   modelApiKey?: string;
   modelBaseUrl?: string;
   modelName: string;
@@ -37,6 +38,18 @@ function requiredToken(value: string | undefined): string {
   return blankSecret(value) ?? '';
 }
 
+function driveCredentialsFromEnv(env: NodeJS.ProcessEnv): string | undefined {
+  const inline = blankSecret(env.DRIVE_CREDENTIALS_JSON);
+  if (inline) return inline;
+  const file = blankSecret(env.DRIVE_CREDENTIALS_FILE);
+  if (!file) return undefined;
+  try {
+    return blankSecret(readFileSync(file, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const saveToken = requiredToken(env.SAVE_TOKEN);
   const mcpToken = requiredToken(env.MCP_TOKEN);
@@ -53,7 +66,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     gcsBucket: blankSecret(env.GCS_BUCKET),
     dataDir: env.DATA_DIR?.trim() || './data',
     driveFolderId: blankSecret(env.DRIVE_FOLDER_ID),
-    googleCredentialsJson: blankSecret(env.GOOGLE_CREDENTIALS_JSON),
+    driveCredentialsJson: driveCredentialsFromEnv(env),
     modelApiKey: blankSecret(env.MODEL_API_KEY),
     modelBaseUrl: blankSecret(env.MODEL_BASE_URL),
     modelName: env.MODEL_NAME?.trim() || 'gpt-4o-mini',
