@@ -1,0 +1,9 @@
+project_id      = "your-gcp-project-id"
+region          = "us-central1"
+container_image = "us-central1-docker.pkg.dev/your-gcp-project-id/reading-index/app:latest"
+
+# Leave Drive off until reading-index-drive-credentials has a version
+# containing a Google authorized_user JSON. See scripts/drive-login.sh.
+# drive_folder_id is optional; empty means the app creates a Reading folder.
+drive_folder_id = ""
+enable_drive    = false
