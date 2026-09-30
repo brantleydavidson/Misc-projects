@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+.env
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!terraform/terraform.tfvars.example
+.gcloud/

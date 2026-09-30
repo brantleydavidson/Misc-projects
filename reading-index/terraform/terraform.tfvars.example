@@ -1,0 +1,8 @@
+project_id      = "your-gcp-project-id"
+region          = "us-central1"
+container_image = "us-central1-docker.pkg.dev/your-gcp-project-id/reading-index/app:latest"
+
+# Leave Drive off until a folder id exists and a service-account JSON
+# version has been added to reading-index-drive-credentials.
+drive_folder_id = ""
+enable_drive    = false
